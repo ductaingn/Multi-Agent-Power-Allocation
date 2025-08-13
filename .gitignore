@@ -1,0 +1,5 @@
+__pycache__
+.vscode
+test.ipynb
+wandb
+debug.py
