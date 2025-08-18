@@ -250,7 +250,26 @@ def compute_h_mW(distance_to_AP:float, is_blocked:bool, x:float, epsilon:float=0
     return h
 
 
-def gamma(w:float, h:float, p:float, interference:float, noise:float, return_power:bool=False) -> Union[float, list[float, float]]:
+def signal_power(p:float, h:float) -> float:
+    """
+    Calculate the signal power.
+
+    Parameters
+    ----------
+    p : float
+        Transmit power.
+    h : float
+        Channel coefficient.
+
+    Returns
+    -------
+    float
+        Signal power.
+    """
+    return p * h
+
+
+def gamma(w:float, s:float, interference:float, noise:float) -> Union[float, list[float, float]]:
     """
     Calculate the signal-to-noise ratio (SNR).
     
@@ -258,10 +277,8 @@ def gamma(w:float, h:float, p:float, interference:float, noise:float, return_pow
     ----------
     w : float 
         Bandwidth.
-    h : float 
-        Channel coefficient
-    p : float 
-        Transmit power.
+    s : float 
+        Signal power.
     interference : float 
         Interference from other devices.
     noise : float 
@@ -276,17 +293,13 @@ def gamma(w:float, h:float, p:float, interference:float, noise:float, return_pow
     gamma, power : list of float
         [SINR, power] if `return_power` is True
     """
-    power = h*p
     interference_plus_noise = w*noise + interference
-    gamma = power/interference_plus_noise
-
-    if return_power:
-        return gamma, power
+    gamma = s/interference_plus_noise
 
     return gamma
 
 
-def compute_rate(w:float, h:float, p:float, interference:float, noise:float, return_power:bool) -> Union[float, list[float, float]]:
+def compute_rate(w:float, sinr:float) -> float:
     """
     Calculate the achievable data rate.
     
@@ -294,32 +307,14 @@ def compute_rate(w:float, h:float, p:float, interference:float, noise:float, ret
     ----------
     w : float 
         Bandwidth.
-    h : float 
-        Channel coefficient
-    p : float 
-        Transmit power.
-    interference : float 
-        Interference from other devices.
-    noise : float 
-        Noise power.
-    return_power : bool
-        Indicate whether to return power or not.
+    sinr : float
+        Signal-to-Interference-plus-Noise Ratio (SINR).
     
     Returns
     -------
     rate : float
-        rate value if `return_power` is False.
-    rate, power : list of float
-        [rate, power] if `return_power` is True
+        rate in bits per second.
     """
-    if return_power:
-        sinr, power = gamma(w, h, p, interference, noise, return_power)
-        rate = w * np.log2(1 + sinr)
+    rate = w * np.log2(1 + sinr)
 
-        return rate, power
-    
-    else:
-        sinr = gamma(w, h, p, interference, noise, return_power)
-        rate = w * np.log2(1 + sinr)
-
-        return rate
+    return rate
