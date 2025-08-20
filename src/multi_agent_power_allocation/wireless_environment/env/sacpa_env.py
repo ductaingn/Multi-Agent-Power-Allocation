@@ -77,8 +77,9 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
     def reset(self, *, seed=None, options=None):
         for wcc_agent in self.wc_clusters:
             wcc_agent.reset()
-        observations = {agent: self.observation_space(agent).sample() for agent in self.agents}
-        infos = {agent: {} for agent in self.agents}
+
+        observations = self.get_observations()
+        infos = {}
         return observations, infos
 
 
@@ -330,6 +331,9 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         self.compute_actions(policy_network_outputs=actions)
         self.get_feedbacks()
+
+        for wc_cluster in self.wc_clusters:
+            wc_cluster.step()
 
         _rewards = self.get_rewards()
         rewards = {

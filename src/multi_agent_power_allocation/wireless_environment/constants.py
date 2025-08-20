@@ -1,3 +1,6 @@
+import numpy as np
+
+
 # Number of APs
 NUM_OF_AP = 1 
 # Number of Devices K

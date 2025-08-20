@@ -3,3 +3,4 @@ __pycache__
 test.ipynb
 wandb
 debug.py
+*.egg-info

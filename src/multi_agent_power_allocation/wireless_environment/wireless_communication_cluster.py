@@ -4,7 +4,12 @@ This module defines the base class for wireless communication cluster, each clus
 """
 import numpy as np
 import attrs
-from .utils import signal_power, gamma,compute_rate, compute_h_sub, compute_h_mW
+from multi_agent_power_allocation.wireless_environment.utils import (
+    signal_power, 
+    gamma,compute_rate, 
+    compute_h_sub, 
+    compute_h_mW
+)
 from typing import Dict, Union
 
 
@@ -125,8 +130,11 @@ class WirelessCommunicationCluster:
 
         self.current_step = 1
 
-        self._init_num_send_packet:np.ndarray = np.ones(shape=(self.num_devices, 2))
+        self._init_num_send_packet:np.ndarray = np.zeros(shape=(self.num_devices, 2))
         self.num_send_packet = self._init_num_send_packet.copy()
+
+        self._init_num_received_packet:np.ndarray = np.zeros_like(self._init_num_send_packet)
+        self.num_received_packet = self._init_num_received_packet
 
         self._init_transmit_power:np.ndarray = np.ones(shape=(self.num_devices, 2))
         self.transmit_power = self._init_transmit_power.copy()
@@ -452,6 +460,17 @@ class WirelessCommunicationCluster:
         return info
     
 
+    def step(self):
+        self.current_step += 1
+
+
     def reset(self):
+        self.current_step = 1
+        self.average_rate = self._init_rate.copy()
+        self.instant_rate = self._init_rate.copy()
         self.num_send_packet = self._init_num_send_packet
+        self.num_send_packet = self._init_num_received_packet
         self.transmit_power = self._init_transmit_power
+        self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
+        self.global_packet_loss_rate = np.zeros_like(self.packet_loss_rate)
+        self.sum_packet_loss_rate = np.zeros_like(self.packet_loss_rate)

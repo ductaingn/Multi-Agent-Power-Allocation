@@ -22,7 +22,7 @@ class WirelessEnvironmentBase(ParallelEnv):
     wc_cluster_config: Dict[str, Any]
     num_cluster: int = attrs.field(default=2, kw_only=True)
     max_num_step: int = attrs.field(default=10_000)
-    current_step:int = attrs.field(default=1)
+    current_step: int = attrs.field(default=1)
     seed: Optional[int] = None
 
     
