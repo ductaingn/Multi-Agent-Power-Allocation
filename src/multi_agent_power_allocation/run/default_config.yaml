@@ -1,8 +1,8 @@
 algorithm: "SACPA"  #Literal["SACPA, SACPF, RAQL, Random"]
 
 env_config:
-  num_cluster: 2
-  max_num_step: 10000
+  num_cluster: 1
+  max_num_step: 1
   
   reward_coef:
     reward_qos: 1.0
@@ -20,3 +20,10 @@ model_config:
   state_dim: 8
   latent_dim: 256
   num_devices: 10
+
+# SAC_config:
+#   gamma: 0.99
+#   lr: 1e-2
+#   train_batch_size_per_learner: 256
+#   num_epochs: 1
+#   minibatch_size: 256
