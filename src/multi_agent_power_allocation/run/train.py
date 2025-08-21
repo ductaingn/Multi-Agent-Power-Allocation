@@ -17,4 +17,7 @@ if __name__=="__main__":
         config = default_config
 
     trainer = Trainer(**config)
-    trainer.train()
+    trained_algo = trainer.train()
+
+    checkpoint_dir = os.path.join(BASE_DIR, "checkpoint")
+    trained_algo.save_checkpoint(checkpoint_dir)

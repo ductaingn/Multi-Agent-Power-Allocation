@@ -38,10 +38,10 @@ class WirelessEnvironmentBase(ParallelEnv):
         if not (self.wc_cluster_config.get("LOS_PATH_LOSS") and self.wc_cluster_config.get("NLOS_PATH_LOSS")):
             num_devices = self.wc_cluster_config.get("num_devices")
             self.wc_cluster_config.update(
-                {"LOS_PATH_LOSS": np.random.normal(0, 5.8, size=(num_devices, self.max_num_step + 1))}
+                {"LOS_PATH_LOSS": np.random.normal(0, 5.8, size=(self.max_num_step + 1, num_devices))}
             )
             self.wc_cluster_config.update(
-                {"NLOS_PATH_LOSS": np.random.normal(0, 8.7, size=(num_devices, self.max_num_step + 1))}
+                {"NLOS_PATH_LOSS": np.random.normal(0, 8.7, size=(self.max_num_step + 1, num_devices))}
             )
 
         self.wc_clusters:list[WirelessCommunicationCluster] = [

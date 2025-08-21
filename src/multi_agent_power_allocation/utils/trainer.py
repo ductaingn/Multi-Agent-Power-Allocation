@@ -1,4 +1,4 @@
-from multi_agent_power_allocation.nn.feature_extractor import FeatureExtractor
+from multi_agent_power_allocation.nn.feature_extractor import SACPAModule
 from multi_agent_power_allocation.wireless_environment.env import *
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
@@ -13,6 +13,7 @@ from typing import Dict, Literal
 from tqdm import tqdm
 from multi_agent_power_allocation import BASE_DIR
 import os
+from memory_profiler import profile
 
 
 def process_default_config(path:str) -> Dict:
@@ -138,7 +139,7 @@ class Trainer:
         rl_module_spec = MultiRLModuleSpec(
             rl_module_specs={
                 policy: RLModuleSpec(
-                    module_class = FeatureExtractor,
+                    module_class = SACPAModule,
                     model_config = self.model_config
                 ) for policy in self.policies
             }
@@ -164,11 +165,11 @@ class Trainer:
 
         return config.build_algo()
     
-
+    @profile
     def train(self) -> Algorithm:
         algorithm = self.build()
 
-        for _ in range(tqdm(self.max_num_step)):
+        for _ in tqdm(range(self.max_num_step)):
             algorithm.train()
 
         return algorithm
