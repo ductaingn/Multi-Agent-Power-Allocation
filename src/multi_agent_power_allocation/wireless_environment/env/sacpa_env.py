@@ -12,7 +12,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
 
-    def reward_qos(self, agent:int) -> float:
+    def reward_qos(self, agent:str) -> float:
         if not hasattr(self, "_reward_qos"):
             self._reward_qos : Dict[int, float] = {
                 agent: 0.0 for agent in self.agents
@@ -21,11 +21,11 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         return self._reward_qos[agent]
 
 
-    def set_reward_qos(self, agent:int, value:float) -> None:
+    def set_reward_qos(self, agent:str, value:float) -> None:
         self._reward_qos[agent] = value 
     
  
-    def observation_space(self, agent:int):
+    def observation_space(self, agent:str):
         wcc_agent = self.wc_clusters[agent]
         num_devices = wcc_agent.num_devices
         L_max = wcc_agent.L_max
@@ -54,7 +54,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         )
     
 
-    def action_space(self, agent:int):
+    def action_space(self, agent:str):
         wcc_agent = self.wc_clusters[agent]
         num_devices = wcc_agent.num_devices
 
@@ -76,7 +76,8 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
     def reset(self, *, seed=None, options=None):
         for wcc_agent in self.wc_clusters:
-            wcc_agent.reset()
+            wcc_agent: str
+            self.wc_clusters[wcc_agent].reset()
 
         observations = self.get_observations()
         infos = {}
@@ -138,7 +139,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         wc_cluster.transmit_power = power
 
 
-    def _compute_action(self, agent:int ,policy_network_output):
+    def _compute_action(self, agent:str ,policy_network_output):
         """
         Compute action for one agent
         """
@@ -158,7 +159,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
             self._compute_action(agent, policy_network_outputs[agent])
 
 
-    def _update_feedback(self, agent:int):
+    def _update_feedback(self, agent:str):
         """
         Compute number of received packet at devices side of one agent (wireless communication cluster)
         """
@@ -167,7 +168,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         interference = np.zeros_like(wc_cluster.signal_power)
 
         for other_agent in self.agents:
-            other_agent : int
+            other_agent : str
             if other_agent != agent:
                 interference += self.wc_clusters[other_agent].signal_power
 
@@ -184,13 +185,13 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
             self._update_feedback(agent)
 
 
-    def _compute_rewards(self, agent:int) -> Dict[str,float]:
+    def _compute_rewards(self, agent:str) -> Dict[str,float]:
         """
         Compute reward for one agent
 
         Parameters
         ----------
-        agent : int
+        agent : str
             Agent id
         
         Returns
@@ -267,14 +268,14 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
     def get_rewards(self) -> Dict[int, Dict[str, float]]:
         rewards = {} 
         for agent in self.agents:
-            agent : int
+            agent : str
             reward = self._compute_rewards(agent)
             rewards.update({agent: reward})
 
         return rewards
 
             
-    def _get_state(self, agent:int) -> np.ndarray:
+    def _get_state(self, agent:str) -> np.ndarray:
         """
         """
         wc_cluster = self.wc_clusters[agent]
@@ -297,7 +298,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         observations = {}
         
         for agent in self.agents:
-            agent : int
+            agent : str
             
             observations.update({agent: self._get_state(agent).flatten()})
 
@@ -308,7 +309,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         infos = {}
 
         for agent in self.agents:
-            agent : int
+            agent : str
 
             wc_cluster = self.wc_clusters[agent]
             agent_reward = rewards.get(agent)
@@ -333,7 +334,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         self.get_feedbacks()
 
         for wc_cluster in self.wc_clusters:
-            wc_cluster.step()
+            self.wc_clusters[wc_cluster].step()
 
         _rewards = self.get_rewards()
         rewards = {
@@ -343,6 +344,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         observations = self.get_observations()
         
         infos = self.get_infos(_rewards)
+        self.log_infos(infos)
 
         self.current_step += 1
         if self.current_step > self.max_num_step:

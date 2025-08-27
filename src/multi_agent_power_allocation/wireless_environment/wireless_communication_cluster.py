@@ -424,38 +424,39 @@ class WirelessCommunicationCluster:
 
     def get_info(self, reward:Dict[str, float]) -> Dict[str, float]:
         info = {}
+        prefix = f'Agent {self.cluster_id}'
 
-        info['Overall/ Reward'] = reward.get("instant_reward")
-        info['Overall/ Reward QoS'] = reward.get("reward_qos")
-        info['Overall/ Reward Power'] = reward.get("reward_power")
-        info['Overall/ Sum Packet loss rate'] = self.sum_packet_loss_rate
-        info['Overall/ Average rate/ Sub6GHz'] = self.average_rate[:,0].sum()/(self.num_devices)
-        info['Overall/ Average rate/ mmWave'] = self.average_rate[:,1].sum()/(self.num_devices)
-        info['Overall/ Average rate/ Global'] = info['Overall/ Average rate/ Sub6GHz'] + info['Overall/ Average rate/ mmWave']
-        info['Overall/ Power usage'] = self.transmit_power.sum()
+        info[f'{prefix}/ Overall/ Reward'] = reward.get("instant_reward")
+        info[f'{prefix}/ Overall/ Reward QoS'] = reward.get("reward_qos")
+        info[f'{prefix}/ Overall/ Reward Power'] = reward.get("reward_power")
+        info[f'{prefix}/ Overall/ Sum Packet loss rate'] = self.sum_packet_loss_rate
+        info[f'{prefix}/ Overall/ Average rate/ Sub6GHz'] = self.average_rate[:,0].sum()/(self.num_devices)
+        info[f'{prefix}/ Overall/ Average rate/ mmWave'] = self.average_rate[:,1].sum()/(self.num_devices)
+        info[f'{prefix}/ Overall/ Average rate/ Global'] = info[f'{prefix}/ Overall/ Average rate/ mmWave'] + info[f'{prefix}/ Overall/ Average rate/ mmWave']
+        info[f'{prefix}/ Overall/ Power usage'] = self.transmit_power.sum()
         
         for k in range(self.num_devices):
-            info[f'Device {k+1}/ Num. Sent packet/ Sub6GHz'] = self.num_send_packet[k,0]
-            info[f'Device {k+1}/ Num. Sent packet/ mmWave'] = self.num_send_packet[k,1]
+            info[f'{prefix}/ Device {k+1}/ Num. Sent packet/ Sub6GHz'] = self.num_send_packet[k,0]
+            info[f'{prefix}/ Device {k+1}/ Num. Sent packet/ mmWave'] = self.num_send_packet[k,1]
 
-            info[f'Device {k+1}/ Num. Received packet/ Sub6GHz'] = self.num_received_packet[k,0]
-            info[f'Device {k+1}/ Num. Received packet/ mmWave'] = self.num_received_packet[k,1]
+            info[f'{prefix}/ Device {k+1}/ Num. Received packet/ Sub6GHz'] = self.num_received_packet[k,0]
+            info[f'{prefix}/ Device {k+1}/ Num. Received packet/ mmWave'] = self.num_received_packet[k,1]
             
-            info[f'Device {k+1}/ Num. Droped packet/ Sub6GHz'] = self.num_send_packet[k,0] - self.num_received_packet[k,0]
-            info[f'Device {k+1}/ Num. Droped packet/ mmWave'] = self.num_send_packet[k,1] - self.num_received_packet[k,1]
+            info[f'{prefix}/ Device {k+1}/ Num. Droped packet/ Sub6GHz'] = self.num_send_packet[k,0] - self.num_received_packet[k,0]
+            info[f'{prefix}/ Device {k+1}/ Num. Droped packet/ mmWave'] = self.num_send_packet[k,1] - self.num_received_packet[k,1]
 
-            info[f'Device {k+1}/ Power/ Sub6GHz'] = self.transmit_power[k,0]
-            info[f'Device {k+1}/ Power/ mmWave'] = self.transmit_power[k,1]
+            info[f'{prefix}/ Device {k+1}/ Power/ Sub6GHz'] = self.transmit_power[k,0]
+            info[f'{prefix}/ Device {k+1}/ Power/ mmWave'] = self.transmit_power[k,1]
 
-            info[f'Device {k+1}/ Packet loss rate/ Global'] = self.global_packet_loss_rate[k]
-            info[f'Device {k+1}/ Packet loss rate/ Sub6GHz'] = self.packet_loss_rate[k,0]
-            info[f'Device {k+1}/ Packet loss rate/ mmWave'] = self.packet_loss_rate[k,1]
-            info[f'Device {k+1}/ Average rate/ Sub6GHz'] = self.average_rate[k,0]
-            info[f'Device {k+1}/ Average rate/ mmWave'] = self.average_rate[k,1]
+            info[f'{prefix}/ Device {k+1}/ Packet loss rate/ Global'] = self.global_packet_loss_rate[k]
+            info[f'{prefix}/ Device {k+1}/ Packet loss rate/ Sub6GHz'] = self.packet_loss_rate[k,0]
+            info[f'{prefix}/ Device {k+1}/ Packet loss rate/ mmWave'] = self.packet_loss_rate[k,1]
+            info[f'{prefix}/ Device {k+1}/ Average rate/ Sub6GHz'] = self.average_rate[k,0]
+            info[f'{prefix}/ Device {k+1}/ Average rate/ mmWave'] = self.average_rate[k,1]
 
             if hasattr(self, '_estimated_ideal_power'):
-                info[f'Device {k+1}/ Estimated ideal power/ Sub6GHz'] = self.estimated_ideal_power[k,0]/self.P_sum
-                info[f'Device {k+1}/ Estimated ideal power/ mmWave'] = self.estimated_ideal_power[k,1]/self.P_sum
+                info[f'{prefix}/ Device {k+1}/ Estimated ideal power/ Sub6GHz'] = self.estimated_ideal_power[k,0]/self.P_sum
+                info[f'{prefix}/ Device {k+1}/ Estimated ideal power/ mmWave'] = self.estimated_ideal_power[k,1]/self.P_sum
         
         return info
     
