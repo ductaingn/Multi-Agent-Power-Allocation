@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import Callable, Optional, Tuple, override
+from typing import Callable, Optional, Tuple
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -85,7 +85,6 @@ class Logger(BaseLogger):
             self.save_interval, self.write_flush
         )
 
-    @override
     def write(self, step_type: str, step: int, data: LOG_DATA_TYPE) -> None:
         wandb.log(data, commit=True)
 
