@@ -62,7 +62,7 @@ class WirelessCommunicationCluster:
     )
 
     L_max: int = attrs.field(
-        default=1,
+        default=10,
         metadata={"description": "Maximum number of packet AP send to each device."}
     )
 
@@ -130,10 +130,10 @@ class WirelessCommunicationCluster:
 
         self.current_step = 1
 
-        self._init_num_send_packet:np.ndarray = np.zeros(shape=(self.num_devices, 2))
+        self._init_num_send_packet:np.ndarray = np.zeros(shape=(self.num_devices, 2), dtype=int)
         self.num_send_packet = self._init_num_send_packet.copy()
 
-        self._init_num_received_packet:np.ndarray = np.zeros_like(self._init_num_send_packet)
+        self._init_num_received_packet:np.ndarray = np.zeros_like(self._init_num_send_packet, dtype=int)
         self.num_received_packet = self._init_num_received_packet
 
         self._init_transmit_power:np.ndarray = np.ones(shape=(self.num_devices, 2))
@@ -154,8 +154,8 @@ class WirelessCommunicationCluster:
         self.instant_rate = self._init_rate.copy()
 
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
-        self.global_packet_loss_rate = np.zeros_like(self.packet_loss_rate)
-        self.sum_packet_loss_rate = np.zeros_like(self.packet_loss_rate)
+        self.global_packet_loss_rate = np.zeros(shape=self.num_devices)
+        self.sum_packet_loss_rate = 0
 
         self.maximum_rate:np.ndarray = np.array([
             [
@@ -173,6 +173,13 @@ class WirelessCommunicationCluster:
         ])
 
         self.estimated_ideal_power = np.zeros(shape=(self.num_devices, 2))
+
+
+    def set_num_send_packet(self, num_send_packet: np.ndarray) -> None:
+        self.num_send_packet = num_send_packet.copy()
+
+    def set_transmit_power(self, transmit_power: np.ndarray) -> None:
+        self.transmit_power = transmit_power.copy()
 
 
     def update_allocation(self, init:bool=False) -> Union[None, np.ndarray]:
@@ -222,7 +229,7 @@ class WirelessCommunicationCluster:
                 rand_sub.pop(rand_sub_index)
                 rand_mW.pop(rand_mW_index)
 
-        allocation = np.array([sub, mW]).transpose()
+        allocation = np.array([sub, mW], dtype=int).transpose()
         self.allocation = allocation
 
         if init:
@@ -346,10 +353,12 @@ class WirelessCommunicationCluster:
         self.average_rate = average_rate
 
 
-    def update_packet_loss_rate(self, num_received_packet:np.ndarray, num_send_packet:np.ndarray) -> None:
+    def update_packet_loss_rate(self) -> None:
         '''
         Updates packet loss rate on each interfaces, devices packet loss rate on the whole, and system packet loss rate
         '''
+        num_send_packet = self.num_send_packet
+        num_received_packet = self.num_received_packet
         packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
         global_packet_loss_rate = np.zeros(shape=(self.num_devices))
         for k in range(self.num_devices):
@@ -399,7 +408,6 @@ class WirelessCommunicationCluster:
         -------
         None
         """
-        # To-do: Might try without estimate_l_max
         l = np.multiply(self.average_rate, self.T/self.D)
         packet_successful_rate = np.ones(shape=(self.num_devices,2)) - self.packet_loss_rate
         l_max_estimate = np.floor(l*packet_successful_rate)
@@ -473,5 +481,5 @@ class WirelessCommunicationCluster:
         self.num_send_packet = self._init_num_received_packet
         self.transmit_power = self._init_transmit_power
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
-        self.global_packet_loss_rate = np.zeros_like(self.packet_loss_rate)
-        self.sum_packet_loss_rate = np.zeros_like(self.packet_loss_rate)
+        self.global_packet_loss_rate = np.zeros(shape=(self.num_devices))
+        self.sum_packet_loss_rate = 0

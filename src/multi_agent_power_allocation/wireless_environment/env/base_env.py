@@ -58,25 +58,6 @@ class WirelessEnvironmentBase(ParallelEnv):
 
     def step(self, actions):
         raise NotImplementedError("This method should be implemented by subclasses.")
-        
-    def log_infos(self, infos:Dict[str, Dict[str, Any]]) -> None:
-        """
-        Log environment infos
-
-        Parameters
-        -----------
-        infos : Dict[Dict[Any, Any]]
-            A dictionary that contains infos of every agent
-
-        Returns
-        -------
-        None
-        """
-        for agent in self.agents:
-            info = infos[agent]
-
-            for key, value in info.items():
-                wandb.log({key: value}, commit=True)
 
     def render(self):
         pass

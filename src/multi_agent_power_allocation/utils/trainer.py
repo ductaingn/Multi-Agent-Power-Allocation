@@ -1,24 +1,30 @@
 from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic, Adam
 from multi_agent_power_allocation.wireless_environment.env import *
-from tianshou.data import Collector, VectorReplayBuffer
+from multi_agent_power_allocation.utils.collector import Collector
+from multi_agent_power_allocation.utils.logger import Logger
+
+from tianshou.data import VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, RayVectorEnv, SubprocVectorEnv
 from tianshou.env.pettingzoo_env import PettingZooEnv
 from tianshou.policy import SACPolicy, MultiAgentPolicyManager, BasePolicy
 from tianshou.trainer import OffpolicyTrainer, BaseTrainer
 from tianshou.utils import WandbLogger
+
 from pettingzoo.utils.conversions import parallel_to_aec
 from torch.utils.tensorboard import SummaryWriter
 import torch
 import gymnasium as gym
+import numpy as np
+
 import pickle
 import yaml
-import numpy as np
 import attrs
 from typing import Dict, Literal, Tuple, List
 from tqdm import tqdm
 import os
 from copy import deepcopy
+
 
 def process_default_config(path:str) -> Dict:
     """
@@ -187,16 +193,19 @@ class Trainer:
 
         # ======== collector setup =========
         train_collector = Collector(
-            policy,
-            train_envs,
-            VectorReplayBuffer(100_000*self.num_env, buffer_num=self.num_env),
+            policy=policy,
+            env=train_envs,
+            buffer=VectorReplayBuffer(100_000*self.num_env, buffer_num=self.num_env),
             exploration_noise=True
         )
 
         # ======== wandb logging setup =========
         log_path = os.path.join(BASE_DIR, 'SACPA')
         writer = SummaryWriter(log_path)
-        logger = WandbLogger(
+        logger = Logger(
+            train_interval=1,
+            test_interval=1,
+            update_interval=1,
             project=self.wandb_config["project"],
             config={
                 "algorithm": self.algorithm,
@@ -208,14 +217,14 @@ class Trainer:
 
         # ======== trainer setup ========
         trainer = OffpolicyTrainer(
-            policy,
-            train_collector,
-            None,
-            1,
-            10_000,
-            1,
-            1,
-            256,
+            policy=policy,
+            train_collector=train_collector,
+            test_collector=None,
+            max_epoch=1,
+            step_per_epoch=10_000,
+            step_per_collect=1,
+            episode_per_test=1,
+            batch_size=256,
             logger=logger,
             test_in_train=False,
         )

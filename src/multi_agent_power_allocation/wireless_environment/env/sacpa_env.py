@@ -135,8 +135,8 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
                 power[k,0] += power[k,1]
                 power[k,1] = 0
 
-        wc_cluster.num_send_packet = number_of_send_packet
-        wc_cluster.transmit_power = power
+        wc_cluster.set_num_send_packet(number_of_send_packet)
+        wc_cluster.set_transmit_power(power)
 
 
     def _compute_action(self, agent:str ,policy_network_output):
@@ -174,6 +174,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         wc_cluster.update_feedback(interference=interference)
         wc_cluster.update_average_rate()
+        wc_cluster.update_packet_loss_rate()
 
 
     def get_feedbacks(self):
@@ -253,7 +254,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         target_power = softmax(target_power, dim=-1)
         reward_power = -wc_cluster.num_devices*(target_power*(target_power.log()-predicted_power.log())).sum().numpy()
-        reward_qos = ((self.current_step-1)*self.reward_qos(agent) + self.reward_qos(agent))/self.current_step
+        reward_qos = ((self.current_step-1)*self.reward_qos(agent) + reward_qos)/self.current_step
 
         self.set_reward_qos(agent, reward_qos)
         instance_reward = self.reward_coef['reward_qos']*reward_qos + self.reward_coef['reward_power']*reward_power
@@ -323,7 +324,9 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         terminations = {
             agent: False for agent in self.agents
         }
-        truncations = {}
+        truncations = {
+            agent: False for agent in self.agents
+        }
         infos = {}
         
         policy_network_outputs = {
@@ -344,10 +347,9 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         observations = self.get_observations()
         
         infos = self.get_infos(_rewards)
-        self.log_infos(infos)
 
         self.current_step += 1
-        if self.current_step > self.max_num_step:
+        if self.current_step > self.max_num_step + 1:
             truncations = {
                 agent: True for agent in self.agents
             }

@@ -2,7 +2,7 @@ algorithm: "SACPA"  #Literal["SACPA, SACPF, RAQL, Random"]
 
 env_config:
   num_cluster: 1
-  max_num_step: 1
+  max_num_step: 10000
   
   reward_coef:
     reward_qos: 1.0
