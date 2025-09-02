@@ -1,19 +1,29 @@
-from multi_agent_power_allocation.nn.feature_extractor import SACPAModule
+from multi_agent_power_allocation import BASE_DIR
+from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic, Adam
 from multi_agent_power_allocation.wireless_environment.env import *
-from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
-from ray.rllib.core.rl_module.rl_module import RLModuleSpec
-from ray import tune
-from ray.rllib.algorithms.sac import SACConfig
-from ray.rllib.algorithms.algorithm import Algorithm
+from multi_agent_power_allocation.utils.collector import Collector
+from multi_agent_power_allocation.utils.logger import Logger
+
+from tianshou.data import VectorReplayBuffer
+from tianshou.env import DummyVectorEnv, RayVectorEnv, SubprocVectorEnv
+from tianshou.env.pettingzoo_env import PettingZooEnv
+from tianshou.policy import SACPolicy, MultiAgentPolicyManager, BasePolicy
+from tianshou.trainer import OffpolicyTrainer, BaseTrainer
+from tianshou.utils import WandbLogger
+
+from pettingzoo.utils.conversions import parallel_to_aec
+from torch.utils.tensorboard import SummaryWriter
+import torch
+import gymnasium as gym
+import numpy as np
+
 import pickle
 import yaml
-import numpy as np
 import attrs
-from typing import Dict, Literal
+from typing import Dict, Literal, Tuple, List
 from tqdm import tqdm
-from multi_agent_power_allocation import BASE_DIR
 import os
-from memory_profiler import profile
+from copy import deepcopy
 
 
 def process_default_config(path:str) -> Dict:
@@ -94,6 +104,8 @@ class Trainer:
     model_config: Dict = attrs.field()
     max_num_step: int = attrs.field(init=False)
     policies: Dict = attrs.field(init=False)
+    wandb_config: Dict = attrs.field()
+    num_env: int = attrs.field(default=1)
 
 
     @env_config.validator
@@ -117,11 +129,14 @@ class Trainer:
 
     @model_config.validator
     def _check_model_config(self, attribute, value:Dict):
-        must_have_keys = ["state_dim", "latent_dim", "num_devices"]
+        must_have_keys = ["latent_dim", "num_devices"]
 
         for key in must_have_keys:
             if key not in value:
                 raise ValueError(f"model_config must contain {key}!")
+            
+        value.update({"observation_space": self.get_env().observation_space})
+        value.update({"action_space": self.get_env().action_space})
 
 
     def __attrs_post_init__(self):
@@ -131,45 +146,94 @@ class Trainer:
         self.policies = [f"agent_{i}_policy" for i in range(self.num_agent)]
 
 
-    def policy_mapping_fn(self, agent_id:int, episode, **kwargs):
-        return f"agent_{agent_id}_policy"
+    def get_env(self):
+        if self.algorithm == "SACPA":
+            env_parallel = WirelessEnvironmentSACPA(**deepcopy(self.env_config))
+        env_aec = parallel_to_aec(env_parallel)
+        return PettingZooEnv(env_aec)
 
 
-    def build(self) -> Algorithm:
-        rl_module_spec = MultiRLModuleSpec(
-            rl_module_specs={
-                policy: RLModuleSpec(
-                    module_class = SACPAModule,
-                    model_config = self.model_config
-                ) for policy in self.policies
-            }
+    def get_agents(self) -> Tuple[BasePolicy, List]:
+        env = self.get_env()
+
+        observation_space = env.observation_space['observation'] if isinstance(
+            env.observation_space, gym.spaces.Dict
+        ) else env.observation_space
+
+        agents = []
+        for _ in range(self.num_agent):
+            actor = SACPAACtor(**self.model_config)
+            actor_optim = Adam(actor.parameters())
+            critic1 = SACPACritic(**self.model_config)
+            critic1_optim = Adam(critic1.parameters())
+            critic2 = SACPACritic(**self.model_config)
+            critic2_optim = Adam(critic2.parameters())
+
+            agent = SACPolicy(
+                actor,
+                actor_optim,
+                critic1,
+                critic1_optim,
+                critic2,
+                critic2_optim
+            )
+
+            agents.append(agent)
+        
+        policy = MultiAgentPolicyManager(agents, env)
+
+        return policy, env.agents
+
+    def build(self, run_name:str) -> BaseTrainer:
+        # ======== environment setup =========
+        train_envs = DummyVectorEnv([lambda: self.get_env() for _ in range(self.num_env)])
+
+        # ======== agent setup =========
+        policy, agents = self.get_agents()
+
+        # ======== collector setup =========
+        train_collector = Collector(
+            policy=policy,
+            env=train_envs,
+            buffer=VectorReplayBuffer(100_000*self.num_env, buffer_num=self.num_env),
+            exploration_noise=True
         )
-        config = (
-            SACConfig()
-            .environment(
-                env=self.env,
-                env_config=self.env_config
+
+        # ======== wandb logging setup =========
+        log_path = os.path.join(BASE_DIR, 'SACPA')
+        writer = SummaryWriter(log_path)
+        logger = Logger(
+            train_interval=1,
+            test_interval=1,
+            update_interval=1,
+            project=self.wandb_config["project"],
+            config={
+                "algorithm": self.algorithm,
+                "env_config": self.env_config
+            },
+            name=run_name
             )
-            .framework("torch")
-            .multi_agent(
-                policies=self.policies,
-                policy_mapping_fn=self.policy_mapping_fn,
-                policies_to_train=self.policies
-            )
-            .rl_module(
-                rl_module_spec=rl_module_spec
-            )
+        logger.load(writer)
+
+        # ======== trainer setup ========
+        trainer = OffpolicyTrainer(
+            policy=policy,
+            train_collector=train_collector,
+            test_collector=None,
+            max_epoch=1,
+            step_per_epoch=10_000,
+            step_per_collect=1,
+            episode_per_test=1,
+            batch_size=256,
+            logger=logger,
+            test_in_train=False,
         )
 
-        config.training()
+        return trainer
 
-        return config.build_algo()
-    
-    @profile
-    def train(self) -> Algorithm:
-        algorithm = self.build()
+    def train(self, run_name:str) -> Dict[str, float | str]:
+        trainer = self.build(run_name)
 
-        for _ in tqdm(range(self.max_num_step)):
-            algorithm.train()
+        result = trainer.run()
 
-        return algorithm
+        return result

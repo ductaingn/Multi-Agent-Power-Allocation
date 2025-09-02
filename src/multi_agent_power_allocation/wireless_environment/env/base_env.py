@@ -1,10 +1,11 @@
 from pettingzoo import ParallelEnv
 import attrs
 from ..wireless_communication_cluster import WirelessCommunicationCluster
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import numpy as np
 import torch
 import random
+import wandb
 
 
 @attrs.define
@@ -32,7 +33,7 @@ class WirelessEnvironmentBase(ParallelEnv):
             torch.manual_seed(self.seed)
             random.seed(self.seed)
 
-        self.agents = [i for i in range(self.num_cluster)]
+        self.agents: List[str] = [str(i) for i in range(self.num_cluster)]
         self.possible_agents = self.agents[:]
 
         if not (self.wc_cluster_config.get("LOS_PATH_LOSS") and self.wc_cluster_config.get("NLOS_PATH_LOSS")):
@@ -44,22 +45,20 @@ class WirelessEnvironmentBase(ParallelEnv):
                 {"NLOS_PATH_LOSS": np.random.normal(0, 8.7, size=(self.max_num_step + 1, num_devices))}
             )
 
-        self.wc_clusters:list[WirelessCommunicationCluster] = [
-            WirelessCommunicationCluster(
+        self.wc_clusters:Dict[str, WirelessCommunicationCluster] = {
+            id: WirelessCommunicationCluster(
                 cluster_id=id,
                 **self.wc_cluster_config
             )
             for id in self.agents
-        ]
+        }
 
-        
     def reset(self, *, seed = None, options = None):
-        # raise NotImplementedError("This method should be implemented by subclasses.")
-        ...
+        raise NotImplementedError("This method should be implemented by subclasses.")
 
     def step(self, actions):
         raise NotImplementedError("This method should be implemented by subclasses.")
-        
+
     def render(self):
         pass
 

@@ -2,7 +2,6 @@ from multi_agent_power_allocation.utils.trainer import Trainer, process_default_
 from multi_agent_power_allocation import BASE_DIR
 import os
 import argparse
-import yaml
 
 
 arg_parser = argparse.ArgumentParser()
@@ -17,7 +16,4 @@ if __name__=="__main__":
         config = default_config
 
     trainer = Trainer(**config)
-    trained_algo = trainer.train()
-
-    checkpoint_dir = os.path.join(BASE_DIR, "checkpoint")
-    trained_algo.save_checkpoint(checkpoint_dir)
+    result = trainer.train("testing")

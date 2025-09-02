@@ -2,7 +2,7 @@ algorithm: "SACPA"  #Literal["SACPA, SACPF, RAQL, Random"]
 
 env_config:
   num_cluster: 1
-  max_num_step: 1
+  max_num_step: 10000
   
   reward_coef:
     reward_qos: 1.0
@@ -17,9 +17,13 @@ env_config:
     device_blockages: [2, 6]
   
 model_config:
-  state_dim: 8
   latent_dim: 256
   num_devices: 10
+
+num_env: 1
+
+wandb_config:
+  project: "PowerAllocationMARL"
 
 # SAC_config:
 #   gamma: 0.99

@@ -62,7 +62,7 @@ class WirelessCommunicationCluster:
     )
 
     L_max: int = attrs.field(
-        default=1,
+        default=10,
         metadata={"description": "Maximum number of packet AP send to each device."}
     )
 
@@ -130,10 +130,10 @@ class WirelessCommunicationCluster:
 
         self.current_step = 1
 
-        self._init_num_send_packet:np.ndarray = np.zeros(shape=(self.num_devices, 2))
+        self._init_num_send_packet:np.ndarray = np.zeros(shape=(self.num_devices, 2), dtype=int)
         self.num_send_packet = self._init_num_send_packet.copy()
 
-        self._init_num_received_packet:np.ndarray = np.zeros_like(self._init_num_send_packet)
+        self._init_num_received_packet:np.ndarray = np.zeros_like(self._init_num_send_packet, dtype=int)
         self.num_received_packet = self._init_num_received_packet
 
         self._init_transmit_power:np.ndarray = np.ones(shape=(self.num_devices, 2))
@@ -154,8 +154,8 @@ class WirelessCommunicationCluster:
         self.instant_rate = self._init_rate.copy()
 
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
-        self.global_packet_loss_rate = np.zeros_like(self.packet_loss_rate)
-        self.sum_packet_loss_rate = np.zeros_like(self.packet_loss_rate)
+        self.global_packet_loss_rate = np.zeros(shape=self.num_devices)
+        self.sum_packet_loss_rate = 0
 
         self.maximum_rate:np.ndarray = np.array([
             [
@@ -173,6 +173,13 @@ class WirelessCommunicationCluster:
         ])
 
         self.estimated_ideal_power = np.zeros(shape=(self.num_devices, 2))
+
+
+    def set_num_send_packet(self, num_send_packet: np.ndarray) -> None:
+        self.num_send_packet = num_send_packet.copy()
+
+    def set_transmit_power(self, transmit_power: np.ndarray) -> None:
+        self.transmit_power = transmit_power.copy()
 
 
     def update_allocation(self, init:bool=False) -> Union[None, np.ndarray]:
@@ -222,7 +229,7 @@ class WirelessCommunicationCluster:
                 rand_sub.pop(rand_sub_index)
                 rand_mW.pop(rand_mW_index)
 
-        allocation = np.array([sub, mW]).transpose()
+        allocation = np.array([sub, mW], dtype=int).transpose()
         self.allocation = allocation
 
         if init:
@@ -346,10 +353,12 @@ class WirelessCommunicationCluster:
         self.average_rate = average_rate
 
 
-    def update_packet_loss_rate(self, num_received_packet:np.ndarray, num_send_packet:np.ndarray) -> None:
+    def update_packet_loss_rate(self) -> None:
         '''
         Updates packet loss rate on each interfaces, devices packet loss rate on the whole, and system packet loss rate
         '''
+        num_send_packet = self.num_send_packet
+        num_received_packet = self.num_received_packet
         packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
         global_packet_loss_rate = np.zeros(shape=(self.num_devices))
         for k in range(self.num_devices):
@@ -399,7 +408,6 @@ class WirelessCommunicationCluster:
         -------
         None
         """
-        # To-do: Might try without estimate_l_max
         l = np.multiply(self.average_rate, self.T/self.D)
         packet_successful_rate = np.ones(shape=(self.num_devices,2)) - self.packet_loss_rate
         l_max_estimate = np.floor(l*packet_successful_rate)
@@ -424,38 +432,39 @@ class WirelessCommunicationCluster:
 
     def get_info(self, reward:Dict[str, float]) -> Dict[str, float]:
         info = {}
+        prefix = f'Agent {self.cluster_id}'
 
-        info['Overall/ Reward'] = reward.get("instant_reward")
-        info['Overall/ Reward QoS'] = reward.get("reward_qos")
-        info['Overall/ Reward Power'] = reward.get("reward_power")
-        info['Overall/ Sum Packet loss rate'] = self.sum_packet_loss_rate
-        info['Overall/ Average rate/ Sub6GHz'] = self.average_rate[:,0].sum()/(self.num_devices)
-        info['Overall/ Average rate/ mmWave'] = self.average_rate[:,1].sum()/(self.num_devices)
-        info['Overall/ Average rate/ Global'] = info['Overall/ Average rate/ Sub6GHz'] + info['Overall/ Average rate/ mmWave']
-        info['Overall/ Power usage'] = self.transmit_power.sum()
+        info[f'{prefix}/ Overall/ Reward'] = reward.get("instant_reward")
+        info[f'{prefix}/ Overall/ Reward QoS'] = reward.get("reward_qos")
+        info[f'{prefix}/ Overall/ Reward Power'] = reward.get("reward_power")
+        info[f'{prefix}/ Overall/ Sum Packet loss rate'] = self.sum_packet_loss_rate
+        info[f'{prefix}/ Overall/ Average rate/ Sub6GHz'] = self.average_rate[:,0].sum()/(self.num_devices)
+        info[f'{prefix}/ Overall/ Average rate/ mmWave'] = self.average_rate[:,1].sum()/(self.num_devices)
+        info[f'{prefix}/ Overall/ Average rate/ Global'] = info[f'{prefix}/ Overall/ Average rate/ mmWave'] + info[f'{prefix}/ Overall/ Average rate/ mmWave']
+        info[f'{prefix}/ Overall/ Power usage'] = self.transmit_power.sum()
         
         for k in range(self.num_devices):
-            info[f'Device {k+1}/ Num. Sent packet/ Sub6GHz'] = self.num_send_packet[k,0]
-            info[f'Device {k+1}/ Num. Sent packet/ mmWave'] = self.num_send_packet[k,1]
+            info[f'{prefix}/ Device {k+1}/ Num. Sent packet/ Sub6GHz'] = self.num_send_packet[k,0]
+            info[f'{prefix}/ Device {k+1}/ Num. Sent packet/ mmWave'] = self.num_send_packet[k,1]
 
-            info[f'Device {k+1}/ Num. Received packet/ Sub6GHz'] = self.num_received_packet[k,0]
-            info[f'Device {k+1}/ Num. Received packet/ mmWave'] = self.num_received_packet[k,1]
+            info[f'{prefix}/ Device {k+1}/ Num. Received packet/ Sub6GHz'] = self.num_received_packet[k,0]
+            info[f'{prefix}/ Device {k+1}/ Num. Received packet/ mmWave'] = self.num_received_packet[k,1]
             
-            info[f'Device {k+1}/ Num. Droped packet/ Sub6GHz'] = self.num_send_packet[k,0] - self.num_received_packet[k,0]
-            info[f'Device {k+1}/ Num. Droped packet/ mmWave'] = self.num_send_packet[k,1] - self.num_received_packet[k,1]
+            info[f'{prefix}/ Device {k+1}/ Num. Droped packet/ Sub6GHz'] = self.num_send_packet[k,0] - self.num_received_packet[k,0]
+            info[f'{prefix}/ Device {k+1}/ Num. Droped packet/ mmWave'] = self.num_send_packet[k,1] - self.num_received_packet[k,1]
 
-            info[f'Device {k+1}/ Power/ Sub6GHz'] = self.transmit_power[k,0]
-            info[f'Device {k+1}/ Power/ mmWave'] = self.transmit_power[k,1]
+            info[f'{prefix}/ Device {k+1}/ Power/ Sub6GHz'] = self.transmit_power[k,0]
+            info[f'{prefix}/ Device {k+1}/ Power/ mmWave'] = self.transmit_power[k,1]
 
-            info[f'Device {k+1}/ Packet loss rate/ Global'] = self.global_packet_loss_rate[k]
-            info[f'Device {k+1}/ Packet loss rate/ Sub6GHz'] = self.packet_loss_rate[k,0]
-            info[f'Device {k+1}/ Packet loss rate/ mmWave'] = self.packet_loss_rate[k,1]
-            info[f'Device {k+1}/ Average rate/ Sub6GHz'] = self.average_rate[k,0]
-            info[f'Device {k+1}/ Average rate/ mmWave'] = self.average_rate[k,1]
+            info[f'{prefix}/ Device {k+1}/ Packet loss rate/ Global'] = self.global_packet_loss_rate[k]
+            info[f'{prefix}/ Device {k+1}/ Packet loss rate/ Sub6GHz'] = self.packet_loss_rate[k,0]
+            info[f'{prefix}/ Device {k+1}/ Packet loss rate/ mmWave'] = self.packet_loss_rate[k,1]
+            info[f'{prefix}/ Device {k+1}/ Average rate/ Sub6GHz'] = self.average_rate[k,0]
+            info[f'{prefix}/ Device {k+1}/ Average rate/ mmWave'] = self.average_rate[k,1]
 
             if hasattr(self, '_estimated_ideal_power'):
-                info[f'Device {k+1}/ Estimated ideal power/ Sub6GHz'] = self.estimated_ideal_power[k,0]/self.P_sum
-                info[f'Device {k+1}/ Estimated ideal power/ mmWave'] = self.estimated_ideal_power[k,1]/self.P_sum
+                info[f'{prefix}/ Device {k+1}/ Estimated ideal power/ Sub6GHz'] = self.estimated_ideal_power[k,0]/self.P_sum
+                info[f'{prefix}/ Device {k+1}/ Estimated ideal power/ mmWave'] = self.estimated_ideal_power[k,1]/self.P_sum
         
         return info
     
@@ -472,5 +481,5 @@ class WirelessCommunicationCluster:
         self.num_send_packet = self._init_num_received_packet
         self.transmit_power = self._init_transmit_power
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
-        self.global_packet_loss_rate = np.zeros_like(self.packet_loss_rate)
-        self.sum_packet_loss_rate = np.zeros_like(self.packet_loss_rate)
+        self.global_packet_loss_rate = np.zeros(shape=(self.num_devices))
+        self.sum_packet_loss_rate = 0
