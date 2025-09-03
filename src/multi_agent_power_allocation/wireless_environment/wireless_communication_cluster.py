@@ -136,7 +136,7 @@ class WirelessCommunicationCluster:
         self._init_num_received_packet:np.ndarray = np.zeros_like(self._init_num_send_packet, dtype=int)
         self.num_received_packet = self._init_num_received_packet
 
-        self._init_transmit_power:np.ndarray = np.ones(shape=(self.num_devices, 2))
+        self._init_transmit_power:np.ndarray = np.full(shape=(self.num_devices, 2), fill_value=1.0/(self.num_devices*2))
         self.transmit_power = self._init_transmit_power.copy()
         
         self._init_allocation:np.ndarray = self.update_allocation(init=True)
@@ -161,18 +161,18 @@ class WirelessCommunicationCluster:
             [
                 compute_rate(
                     w=self._W_sub, 
-                    sinr=gamma(w=self._W_sub, s=self._init_transmit_power[k, 0], interference=0, noise=self.Sigma_sqr)
+                    sinr=gamma(w=self._W_sub, s=self.P_sum, interference=0, noise=self.Sigma_sqr)
                 ) for k in range(self.num_devices)
             ],
             [
                 compute_rate(
                     w=self._W_mw, 
-                    sinr=gamma(w=self._W_mw, s=self._init_transmit_power[k, 1], interference=0, noise=self.Sigma_sqr)
+                    sinr=gamma(w=self._W_mw, s=self.P_sum, interference=0, noise=self.Sigma_sqr)
                 ) for k in range(self.num_devices)
             ],
         ])
 
-        self.estimated_ideal_power = np.zeros(shape=(self.num_devices, 2))
+        self.estimated_ideal_power = np.zeros(shape=(self.num_devices, 2)) # Unit: Percentage
 
 
     def set_num_send_packet(self, num_send_packet: np.ndarray) -> None:
@@ -462,9 +462,9 @@ class WirelessCommunicationCluster:
             info[f'{prefix}/ Device {k+1}/ Average rate/ Sub6GHz'] = self.average_rate[k,0]
             info[f'{prefix}/ Device {k+1}/ Average rate/ mmWave'] = self.average_rate[k,1]
 
-            if hasattr(self, '_estimated_ideal_power'):
-                info[f'{prefix}/ Device {k+1}/ Estimated ideal power/ Sub6GHz'] = self.estimated_ideal_power[k,0]/self.P_sum
-                info[f'{prefix}/ Device {k+1}/ Estimated ideal power/ mmWave'] = self.estimated_ideal_power[k,1]/self.P_sum
+            if hasattr(self, 'estimated_ideal_power'):
+                info[f'{prefix}/ Device {k+1}/ Estimated ideal power/ Sub6GHz'] = self.estimated_ideal_power[k,0]
+                info[f'{prefix}/ Device {k+1}/ Estimated ideal power/ mmWave'] = self.estimated_ideal_power[k,1]
         
         return info
     

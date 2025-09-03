@@ -1,5 +1,5 @@
 from multi_agent_power_allocation import BASE_DIR
-from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic, Adam
+from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic, Adam, ActorTraceWrapper, CriticTraceWrapper
 from multi_agent_power_allocation.wireless_environment.env import *
 from multi_agent_power_allocation.utils.collector import Collector
 from multi_agent_power_allocation.utils.logger import Logger
@@ -9,14 +9,16 @@ from tianshou.env import DummyVectorEnv, RayVectorEnv, SubprocVectorEnv
 from tianshou.env.pettingzoo_env import PettingZooEnv
 from tianshou.policy import SACPolicy, MultiAgentPolicyManager, BasePolicy
 from tianshou.trainer import OffpolicyTrainer, BaseTrainer
-from tianshou.utils import WandbLogger
+from tianshou.utils import MultipleLRSchedulers
 
 from pettingzoo.utils.conversions import parallel_to_aec
 from torch.utils.tensorboard import SummaryWriter
 import torch
+from torch.optim.lr_scheduler import CosineAnnealingLR
 import gymnasium as gym
 import numpy as np
 
+import wandb
 import pickle
 import yaml
 import attrs
@@ -84,7 +86,7 @@ def process_default_config(path:str) -> Dict:
     else:
         raise FileNotFoundError("`device_positions` path is not valid!")
 
-    device_blockages = np.array(wc_cluster_config["device_blockages"])
+    device_blockages = np.array(wc_cluster_config["device_blockages"]) - 1
     one_hot = np.zeros(wc_cluster_config["num_devices"], dtype=bool)
     one_hot[device_blockages] = True
 
@@ -105,6 +107,7 @@ class Trainer:
     max_num_step: int = attrs.field(init=False)
     policies: Dict = attrs.field(init=False)
     wandb_config: Dict = attrs.field()
+    SAC_config: Dict = attrs.field()
     num_env: int = attrs.field(default=1)
 
 
@@ -153,34 +156,44 @@ class Trainer:
         return PettingZooEnv(env_aec)
 
 
-    def get_agents(self) -> Tuple[BasePolicy, List]:
+    def get_agents(self) -> Tuple[MultiAgentPolicyManager, List]:
         env = self.get_env()
 
-        observation_space = env.observation_space['observation'] if isinstance(
-            env.observation_space, gym.spaces.Dict
-        ) else env.observation_space
-
-        agents = []
+        policies = []
         for _ in range(self.num_agent):
             actor = SACPAACtor(**self.model_config)
-            actor_optim = Adam(actor.parameters())
+            actor_optim = Adam(actor.parameters(), lr=self.SAC_config["lr"])
             critic1 = SACPACritic(**self.model_config)
-            critic1_optim = Adam(critic1.parameters())
+            critic1_optim = Adam(critic1.parameters(), lr=self.SAC_config["lr"])
             critic2 = SACPACritic(**self.model_config)
-            critic2_optim = Adam(critic2.parameters())
+            critic2_optim = Adam(critic2.parameters(), lr=self.SAC_config["lr"])
 
-            agent = SACPolicy(
+            # auto entropy tuning setup
+            target_entropy = float(-np.prod(env.action_space.shape))  
+            log_alpha = torch.log(torch.ones(1) * 1.0).requires_grad_(True)
+            alpha_optim = Adam([log_alpha], lr=self.SAC_config["lr"])
+
+            scheduler = MultipleLRSchedulers(
+                CosineAnnealingLR(actor_optim, T_max=self.env_config["max_num_step"]),
+                CosineAnnealingLR(critic1_optim, T_max=self.env_config["max_num_step"]),
+                CosineAnnealingLR(critic2_optim, T_max=self.env_config["max_num_step"]),
+                CosineAnnealingLR(alpha_optim, T_max=self.env_config["max_num_step"])
+            )
+
+            policy = SACPolicy(
                 actor,
                 actor_optim,
                 critic1,
                 critic1_optim,
                 critic2,
-                critic2_optim
+                critic2_optim,
+                alpha=(target_entropy, log_alpha, alpha_optim),
+                lr_scheduler=scheduler
             )
 
-            agents.append(agent)
+            policies.append(policy)
         
-        policy = MultiAgentPolicyManager(agents, env)
+        policy = MultiAgentPolicyManager(policies, env)
 
         return policy, env.agents
 
@@ -191,17 +204,7 @@ class Trainer:
         # ======== agent setup =========
         policy, agents = self.get_agents()
 
-        # ======== collector setup =========
-        train_collector = Collector(
-            policy=policy,
-            env=train_envs,
-            buffer=VectorReplayBuffer(100_000*self.num_env, buffer_num=self.num_env),
-            exploration_noise=True
-        )
-
-        # ======== wandb logging setup =========
-        log_path = os.path.join(BASE_DIR, 'SACPA')
-        writer = SummaryWriter(log_path)
+        # ======== logging setup =========
         logger = Logger(
             train_interval=1,
             test_interval=1,
@@ -212,8 +215,49 @@ class Trainer:
                 "env_config": self.env_config
             },
             name=run_name
-            )
-        logger.load(writer)
+        )
+        writer = logger.writer
+        
+        dummy_env = self.get_env()
+        dummy_obs = torch.tensor([dummy_env.observation_space.sample()])
+        dummy_act = torch.tensor([dummy_env.action_space.sample()])
+
+        actor_script = torch.jit.script(ActorTraceWrapper(policy.policies[agents[0]].actor))
+        critic1_script = torch.jit.script(CriticTraceWrapper(policy.policies[agents[0]].critic1))
+        writer.add_graph(actor_script, dummy_obs)
+        writer.add_graph(critic1_script, (dummy_obs, dummy_act))
+
+        del dummy_env, dummy_obs, dummy_act
+
+        def log_params(step):
+            for agent, pol in policy.policies.items():
+                pol: SACPolicy
+
+                lr = pol.actor_optim.param_groups[0]['lr']
+                writer.add_scalar(f"Agent {agent}/ learning rate", lr, step)
+
+                for name, param in pol.actor.named_parameters():
+                    writer.add_histogram(f"Agent {agent}/ actor module/ {name}", param, step)
+                    writer.add_histogram(f"Agent {agent}/ actor module/ {name}.grad", torch.zeros_like(param) if param.grad is None else param.grad, step)
+
+        
+        # ======== collector setup =========
+        train_collector = Collector(
+            policy=policy,
+            env=train_envs,
+            buffer=VectorReplayBuffer(100_000*self.num_env, buffer_num=self.num_env),
+            exploration_noise=True
+        )
+        train_collector.load_writer(writer)
+
+        # ======== callback setup ========
+        def save_best_fn(policy):
+            model_save_path = os.path.join(writer.log_dir, "model", "policy.pth")
+            os.makedirs(model_save_path, exist_ok=True)
+            torch.save(policy.policies[agents[0]].state_dict(), model_save_path)
+
+        def train_fn(epoch, env_step):
+            log_params(env_step)
 
         # ======== trainer setup ========
         trainer = OffpolicyTrainer(
@@ -225,6 +269,9 @@ class Trainer:
             step_per_collect=1,
             episode_per_test=1,
             batch_size=256,
+            update_per_step=1,
+            save_best_fn=save_best_fn,
+            train_fn=train_fn,
             logger=logger,
             test_in_train=False,
         )
@@ -235,5 +282,8 @@ class Trainer:
         trainer = self.build(run_name)
 
         result = trainer.run()
+
+        trainer.logger.writer.close()
+        trainer.logger.wandb_run.finish(exit_code=0)
 
         return result

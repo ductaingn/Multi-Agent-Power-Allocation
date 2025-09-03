@@ -29,7 +29,7 @@ class BackBone(nn.Module):
         )
         self.project = nn.Linear(256*self.num_devices, latent_dim)
 
-    def forward(self, obs:torch.Tensor)->torch.Tensor:
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
         batch_size = obs.shape[0]
         out = obs.reshape(batch_size, self.num_devices, self.state_dim)
         
@@ -45,10 +45,12 @@ class BackBone(nn.Module):
         
 
 class SACPAACtor(nn.Module):
-    def __init__(self, observation_space:Space, action_space:Space, latent_dim, num_devices, *args, **kwargs):
+    def __init__(self, observation_space:Space, action_space:Space, latent_dim, num_devices, log_std_min=LOG_STD_MIN, log_std_max=LOG_STD_MAX, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         iot_device_state_dim, action_dim = observation_space.shape[-1]//num_devices, action_space.shape[-1]
+        self.log_std_min = log_std_min
+        self.log_std_max = log_std_max
 
         self.features_extractor = BackBone(iot_device_state_dim, latent_dim, num_devices)
 
@@ -60,7 +62,6 @@ class SACPAACtor(nn.Module):
         # Build heads.
         self.mu = nn.Linear(256, action_dim)
         self.log_std = nn.Linear(256, action_dim)
-        
 
     def forward(self, obs, state=None, info={}):
         if isinstance(obs, np.ndarray):
@@ -72,12 +73,12 @@ class SACPAACtor(nn.Module):
         latent = self.latent_pi(features)
         mu = self.mu(latent)
         log_std = self.log_std(latent)
-        log_std = torch.clamp(log_std, LOG_STD_MIN, LOG_STD_MAX).exp()
-        logits = (mu ,log_std)
+        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max).exp()
+        logits = (mu, log_std)
 
         return logits, state
 
-        
+
 class SACPACritic(nn.Module):
     def __init__(self, observation_space:Space, action_space:Space, latent_dim, num_devices, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -93,7 +94,7 @@ class SACPACritic(nn.Module):
 
         self.qf = nn.Linear(256, 1)
 
-    def forward(self, obs, act, info={}):
+    def forward(self, obs, act):
         if isinstance(obs, np.ndarray):
             obs = torch.tensor(obs, dtype=torch.float32)
         if isinstance(obs, Batch):
@@ -107,3 +108,46 @@ class SACPACritic(nn.Module):
         q_value = self.qf(latent)
         
         return q_value
+    
+
+
+class ActorTraceWrapper(nn.Module):
+    def __init__(self, actor: SACPAACtor):
+        super().__init__()
+        self.features_extractor = actor.features_extractor
+        self.latent_pi = actor.latent_pi
+        self.mu = actor.mu
+        self.log_std = actor.log_std
+        self.log_std_min = actor.log_std_min
+        self.log_std_max = actor.log_std_min
+        
+
+    def forward(self, obs):
+        batch = obs.shape[0]
+        features = self.features_extractor(obs.view(batch, -1))
+        latent = self.latent_pi(features)
+        mu = self.mu(latent)
+        log_std = self.log_std(latent)
+        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max).exp()
+        logits = (mu, log_std)
+
+        return logits
+
+
+
+class CriticTraceWrapper(nn.Module):
+    def __init__(self, critic: SACPACritic):
+        super().__init__()
+        self.features_extractor = critic.features_extractor
+        self.latent_q = critic.latent_q
+        self.qf = critic.qf        
+
+    def forward(self, obs, act):
+        batch = obs.shape[0]
+        features = self.features_extractor(obs.view(batch, -1))
+        latent = self.latent_q(torch.cat([features, act], dim=1))
+        q_value = self.qf(latent)
+
+        return q_value
+
+        

@@ -4,7 +4,8 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
 import torch
-import wandb        
+from torch.utils.tensorboard import SummaryWriter
+import wandb
 
 from tianshou.env import DummyVectorEnv, RayVectorEnv, SubprocVectorEnv
 from tianshou.data.collector import Collector
@@ -20,6 +21,9 @@ class Collector(Collector):
     """
     Collector that returns environment information from env.step()
     """
+    def load_writer(self, writer:SummaryWriter):
+        self.writer = writer
+    
     def collect(
         self,
         n_step: Optional[int] = None,
@@ -138,7 +142,8 @@ class Collector(Collector):
 
             if len(info) > 1:
                 warnings.warn("Logging first environment info only!")
-            wandb.log(info[0], commit=True)
+            for k, v in info[0].items():
+                self.writer.add_scalar(k, v, self.collect_step, new_style=True)
 
             self.data.update(
                 obs_next=obs_next,
