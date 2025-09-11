@@ -166,6 +166,7 @@ class Trainer:
         env = self.get_env()
 
         policies = []
+        schedulers = []
         for _ in range(self.num_agent):
             actor = SACPAACtor(**self.model_config).to(self.device)
             actor_optim = Adam(actor.parameters(), lr=self.SAC_config["lr"])
@@ -179,12 +180,12 @@ class Trainer:
             log_alpha = torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
             alpha_optim = Adam([log_alpha], lr=self.SAC_config["lr"])
 
-            scheduler = MultipleLRSchedulers(
+            schedulers += [
                 CosineAnnealingLR(actor_optim, T_max=self.env_config["max_num_step"]),
                 CosineAnnealingLR(critic1_optim, T_max=self.env_config["max_num_step"]),
                 CosineAnnealingLR(critic2_optim, T_max=self.env_config["max_num_step"]),
                 CosineAnnealingLR(alpha_optim, T_max=self.env_config["max_num_step"])
-            )
+            ]
 
             policy = SACPolicy(
                 actor,
@@ -194,12 +195,15 @@ class Trainer:
                 critic2,
                 critic2_optim,
                 alpha=(target_entropy, log_alpha, alpha_optim),
-                lr_scheduler=scheduler
             )
 
             policies.append(policy)
         
-        policy = MultiAgentPolicyManager(policies, env)
+        policy = MultiAgentPolicyManager(
+            policies, 
+            env, 
+            # lr_scheduler=MultipleLRSchedulers(*schedulers)
+        )
 
         return policy, env.agents
 
@@ -226,8 +230,8 @@ class Trainer:
         logger.wandb_run.watch(policy.policies[agents[0]].actor, log='all', log_graph=True, log_freq=100)
 
         def log_params(step):
-            logger.wandb_run.log({"Learning rate": policy.policies[agents[0]].lr_scheduler.schedulers[0].get_last_lr()[0]}, step=step)
-        
+            logger.wandb_run.log({"Learning rate": policy.policies[agents[0]].actor_optim.param_groups[0]['lr']}, step=step)
+
         # ======== collector setup =========
         train_collector = Collector(
             policy=policy,
