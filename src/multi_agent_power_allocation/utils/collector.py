@@ -4,7 +4,6 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
 import torch
-from torch.utils.tensorboard import SummaryWriter
 import wandb
 
 from tianshou.env import DummyVectorEnv, RayVectorEnv, SubprocVectorEnv
@@ -15,14 +14,15 @@ from tianshou.data import (
 )
 
 from multi_agent_power_allocation.wireless_environment.env import WirelessEnvironmentBase
+from multi_agent_power_allocation.utils.logger import Logger
 
 
 class Collector(Collector):
     """
     Collector that returns environment information from env.step()
     """
-    def load_writer(self, writer:SummaryWriter):
-        self.writer = writer
+    def load_logger(self, logger: Logger):
+        self.logger = logger
     
     def collect(
         self,
@@ -142,8 +142,7 @@ class Collector(Collector):
 
             if len(info) > 1:
                 warnings.warn("Logging first environment info only!")
-            for k, v in info[0].items():
-                self.writer.add_scalar(k, v, self.collect_step, new_style=True)
+            self.logger.wandb_run.log(info[0], step=self.collect_step)
 
             self.data.update(
                 obs_next=obs_next,

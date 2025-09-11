@@ -70,28 +70,14 @@ class Logger(BaseLogger):
             id=run_id,
             resume="allow",
             entity=entity,
-            sync_tensorboard=True,
             monitor_gym=monitor_gym,
             config=config,  # type: ignore,
             settings=wandb.Settings(code_dir=None)
         ) if not wandb.run else wandb.run
         self.wandb_run._label(repo="PowerAllocationMARL")  # type: ignore
-        writer_log_dir = os.path.join(self.wandb_run.dir, 'tensorboard')
-        os.makedirs(writer_log_dir, exist_ok=True)
-        self.writer = SummaryWriter(writer_log_dir)
-        self.tensorboard_logger: TensorboardLogger = TensorboardLogger(
-            self.writer, self.train_interval, self.test_interval, self.update_interval,
-            self.save_interval, self.write_flush
-        )
 
     def write(self, step_type: str, step: int, data: LOG_DATA_TYPE) -> None:
-        if self.writer is None:
-            raise Exception(
-                "`logger` needs to load the Tensorboard Writer before "
-                "writing data. Try `logger.load(SummaryWriter(log_path))`"
-            )
-        else:
-            self.tensorboard_logger.write(step_type, step, data)
+        self.wandb_run.log(data, step=step)
 
     def save_data(
         self,

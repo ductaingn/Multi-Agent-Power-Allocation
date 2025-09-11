@@ -112,10 +112,10 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         for k in range(wc_cluster.num_devices):
             if number_of_send_packet[k,0] + number_of_send_packet[k,1] == 0: # Force to send at least one packet on more reliable channel
-                if wc_cluster.packet_loss_rate[k,0] > wc_cluster.packet_loss_rate[k,1]:
-                    number_of_send_packet[k,1] = 1
-                else:
+                if wc_cluster.packet_loss_rate[k,0] <= wc_cluster.packet_loss_rate[k,1]:
                     number_of_send_packet[k,0] = 1
+                else:
+                    number_of_send_packet[k,1] = 1
             
             if number_of_send_packet[k,0] + number_of_send_packet[k,1] > wc_cluster.L_max:
                 # If the number of packets to send exceeds the maximum number of packets that can be sent
@@ -137,7 +137,6 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)
-        wc_cluster.update_signal_power()
 
 
     def _compute_action(self, agent:str ,policy_network_output):
@@ -148,7 +147,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         wc_cluster.estimate_l_max()
         self.compute_number_send_packet_and_power(wc_cluster, policy_network_output)
         wc_cluster.update_allocation()
-
+        wc_cluster.update_signal_power() # Must be updated after allocation
 
     def compute_actions(self, policy_network_outputs):
         """
@@ -172,8 +171,8 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
                 interference += self.wc_clusters[other_agent].signal_power
 
         wc_cluster.update_feedback(interference=interference)
-        wc_cluster.update_average_rate()
         wc_cluster.update_packet_loss_rate()
+        wc_cluster.update_average_rate()
 
 
     def get_feedbacks(self):

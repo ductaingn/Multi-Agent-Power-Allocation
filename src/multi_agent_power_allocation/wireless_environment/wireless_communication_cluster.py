@@ -147,7 +147,8 @@ class WirelessCommunicationCluster:
 
         self.channel_power_gain = np.zeros(shape=(self.num_devices, 2))
 
-        self._init_rate:np.ndarray = self.update_instant_rate(interference=np.zeros_like(self.signal_power), init=True)
+        # self._init_rate:np.ndarray = self.update_instant_rate(interference=np.zeros_like(self.signal_power), init=True)
+        self._init_rate:np.ndarray = np.zeros(shape=(self.num_devices, 2))
         
         self.average_rate = self._init_rate.copy()
         self.previous_rate = self._init_rate.copy()
