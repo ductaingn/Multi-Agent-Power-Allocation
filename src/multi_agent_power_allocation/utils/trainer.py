@@ -52,6 +52,10 @@ def process_default_config(path:str) -> Dict:
     wc_cluster_config:dict = env_config.get("wc_cluster_config")
     model_config:dict = config.get("model_config")
 
+    env_config.update({
+        "n_warm_up_step": config.get("n_warm_up_step")
+    })
+
     h_tilde_path = os.path.join(
         BASE_DIR,
         "data",
@@ -89,7 +93,8 @@ def process_default_config(path:str) -> Dict:
     one_hot[device_blockages] = True
 
     wc_cluster_config.update({
-        "device_blockages": one_hot 
+        "device_blockages": one_hot,
+        "n_warm_up_step": config.get("n_warm_up_step")
     })
 
     return config
@@ -103,6 +108,7 @@ class Trainer:
     num_agent: int = attrs.field(init=False)
     model_config: Dict = attrs.field()
     max_num_step: int = attrs.field(init=False)
+    n_warm_up_step: int = attrs.field()
     policies: Dict = attrs.field(init=False)
     wandb_config: Dict = attrs.field()
     SAC_config: Dict = attrs.field()
@@ -217,7 +223,7 @@ class Trainer:
             name=run_name
         )
 
-        logger.wandb_run.watch(policy.policies[agents[0]].actor, log='gradients', log_graph=True, log_freq=100)
+        logger.wandb_run.watch(policy.policies[agents[0]].actor, log='all', log_graph=True, log_freq=100)
 
         def log_params(step):
             logger.wandb_run.log({"Learning rate": policy.policies[agents[0]].lr_scheduler.schedulers[0].get_last_lr()[0]}, step=step)
@@ -230,6 +236,8 @@ class Trainer:
             exploration_noise=True
         )
         train_collector.load_logger(logger)
+        # Warm up 
+        # train_collector.collect(self.n_warm_up_step)
 
         # ======== callback setup ========
         def save_best_fn(policy):

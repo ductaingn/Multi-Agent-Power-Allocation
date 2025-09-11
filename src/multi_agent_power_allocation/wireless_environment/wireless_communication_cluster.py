@@ -19,6 +19,10 @@ class WirelessCommunicationCluster:
     Base class for wireless communication clusters.
     This class is designed to be extended by specific wireless communication cluster implementations.
     """
+    n_warm_up_step: int = attrs.field(
+        metadata={"description": "Number of warm up step."}
+    )
+
     h_tilde: np.ndarray = attrs.field(
         metadata={"description": "Channel state information matrix."}
     )

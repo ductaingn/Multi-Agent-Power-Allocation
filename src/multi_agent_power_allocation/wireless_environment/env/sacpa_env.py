@@ -97,43 +97,47 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         -------
         None
         """
-        power_start_index = 2*wc_cluster.num_devices
-        interface_score = policy_network_output[:power_start_index].reshape(wc_cluster.num_devices, 2)
-        interface_score = torch.softmax(torch.tensor(interface_score), dim=1).numpy()
+        if self.current_step <= self.n_warm_up_step:
+            number_of_send_packet = np.full_like(wc_cluster.num_send_packet, wc_cluster.L_max)
+            power = np.full_like(wc_cluster.transmit_power, 1.0/(wc_cluster.num_devices*2))
+        else:
+            power_start_index = 2*wc_cluster.num_devices
+            interface_score = policy_network_output[:power_start_index].reshape(wc_cluster.num_devices, 2)
+            interface_score = torch.softmax(torch.tensor(interface_score), dim=1).numpy()
 
-        number_of_send_packet = np.minimum(np.minimum(
-            interface_score*wc_cluster.L_max,
-            wc_cluster.l_max_estimate,
-        ).astype(int), wc_cluster.L_max)
+            number_of_send_packet = np.minimum(np.minimum(
+                interface_score*wc_cluster.L_max,
+                wc_cluster.l_max_estimate,
+            ).astype(int), wc_cluster.L_max)
 
-        power = policy_network_output[power_start_index:]
-        power = torch.softmax(torch.tensor(power), dim=-1).numpy()
-        power = power.reshape(wc_cluster.num_devices, 2)
+            power = policy_network_output[power_start_index:]
+            power = torch.softmax(torch.tensor(power), dim=-1).numpy()
+            power = power.reshape(wc_cluster.num_devices, 2)
 
-        for k in range(wc_cluster.num_devices):
-            if number_of_send_packet[k,0] + number_of_send_packet[k,1] == 0: # Force to send at least one packet on more reliable channel
-                if wc_cluster.packet_loss_rate[k,0] <= wc_cluster.packet_loss_rate[k,1]:
-                    number_of_send_packet[k,0] = 1
-                else:
-                    number_of_send_packet[k,1] = 1
-            
-            if number_of_send_packet[k,0] + number_of_send_packet[k,1] > wc_cluster.L_max:
-                # If the number of packets to send exceeds the maximum number of packets that can be sent
-                # then send on both channels by the proportion of the packet success rate
-                if np.sum(wc_cluster.packet_loss_rate[k]) == 0:
-                    psr_proportion = 0.5
-                else:
-                    psr_proportion = 1 - wc_cluster.packet_loss_rate[k,0]/np.sum(wc_cluster.packet_loss_rate[k])
-                number_of_send_packet[k,0] = np.floor(psr_proportion*wc_cluster.L_max)
-                number_of_send_packet[k,1] = wc_cluster.L_max - number_of_send_packet[k,0]
-            
-            # Send the remaining power to the other channel
-            if number_of_send_packet[k,0] == 0:
-                power[k,1] += power[k,0]
-                power[k,0] = 0
-            if number_of_send_packet[k,1] == 0:
-                power[k,0] += power[k,1]
-                power[k,1] = 0
+            for k in range(wc_cluster.num_devices):
+                if number_of_send_packet[k,0] + number_of_send_packet[k,1] == 0: # Force to send at least one packet on more reliable channel
+                    if wc_cluster.packet_loss_rate[k,0] <= wc_cluster.packet_loss_rate[k,1]:
+                        number_of_send_packet[k,0] = 1
+                    else:
+                        number_of_send_packet[k,1] = 1
+                
+                if number_of_send_packet[k,0] + number_of_send_packet[k,1] > wc_cluster.L_max:
+                    # If the number of packets to send exceeds the maximum number of packets that can be sent
+                    # then send on both channels by the proportion of the packet success rate
+                    if np.sum(wc_cluster.packet_loss_rate[k]) == 0:
+                        psr_proportion = 0.5
+                    else:
+                        psr_proportion = 1 - wc_cluster.packet_loss_rate[k,0]/np.sum(wc_cluster.packet_loss_rate[k])
+                    number_of_send_packet[k,0] = np.floor(psr_proportion*wc_cluster.L_max)
+                    number_of_send_packet[k,1] = wc_cluster.L_max - number_of_send_packet[k,0]
+                
+                # Send the remaining power to the other channel
+                if number_of_send_packet[k,0] == 0:
+                    power[k,1] += power[k,0]
+                    power[k,0] = 0
+                if number_of_send_packet[k,1] == 0:
+                    power[k,0] += power[k,1]
+                    power[k,1] = 0
 
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)

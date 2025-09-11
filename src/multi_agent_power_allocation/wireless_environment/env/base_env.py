@@ -21,10 +21,11 @@ class WirelessEnvironmentBase(ParallelEnv):
     }
     reward_coef: Dict[str, float]
     wc_cluster_config: Dict[str, Any]
+    n_warm_up_step: int = attrs.field()
     num_cluster: int = attrs.field(default=2, kw_only=True)
     max_num_step: int = attrs.field(default=10_000)
     current_step: int = attrs.field(default=1)
-    seed: Optional[int] = None
+    seed: int = attrs.field(default=None)
 
     
     def __attrs_post_init__(self):

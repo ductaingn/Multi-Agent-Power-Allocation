@@ -21,6 +21,7 @@ model_config:
   num_devices: 10
 
 num_env: 1
+n_warm_up_step: 100
 
 wandb_config:
   project: "PowerAllocationMARL"
