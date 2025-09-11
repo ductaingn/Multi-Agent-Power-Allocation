@@ -112,7 +112,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         for k in range(wc_cluster.num_devices):
             if number_of_send_packet[k,0] + number_of_send_packet[k,1] == 0: # Force to send at least one packet on more reliable channel
-                if wc_cluster.packet_loss_rate[k,0] < wc_cluster.packet_loss_rate[k,1]:
+                if wc_cluster.packet_loss_rate[k,0] <= wc_cluster.packet_loss_rate[k,1]:
                     number_of_send_packet[k,0] = 1
                 else:
                     number_of_send_packet[k,1] = 1
@@ -147,14 +147,12 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         wc_cluster.estimate_l_max()
         self.compute_number_send_packet_and_power(wc_cluster, policy_network_output)
         wc_cluster.update_allocation()
-        wc_cluster.update_signal_power()
-
+        wc_cluster.update_signal_power() # Must be updated after allocation
 
     def compute_actions(self, policy_network_outputs):
         """
         Compute actions accross all agents
         """
-        actions = {}
         for agent in self.agents:
             self._compute_action(agent, policy_network_outputs[agent])
 
@@ -173,8 +171,8 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
                 interference += self.wc_clusters[other_agent].signal_power
 
         wc_cluster.update_feedback(interference=interference)
-        wc_cluster.update_average_rate()
         wc_cluster.update_packet_loss_rate()
+        wc_cluster.update_average_rate()
 
 
     def get_feedbacks(self):
@@ -208,7 +206,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
             
             ideal_power = (2**((num_send_packet*wc_cluster.D)/(W*wc_cluster.T)) - 1) * \
                         W*wc_cluster.Sigma_sqr/channel_power
-            return min(ideal_power, wc_cluster.P_sum)
+            return min(ideal_power/wc_cluster.P_sum, 1.0)
         
         reward_qos = 0
         reward_power = 0
@@ -243,17 +241,21 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
                 wc_cluster.estimated_ideal_power[k, 0] = estimate_ideal_power(num_send_packet[0], channel_power_gain[0], wc_cluster._W_sub)
                 target_power.append(wc_cluster.estimated_ideal_power[k, 0])
                 predicted_power.append(transmit_power[0])
+            else:
+                wc_cluster.estimated_ideal_power[k, 0] = 0.0
 
             if num_send_packet[1] > 0:
                 wc_cluster.estimated_ideal_power[k, 1] = estimate_ideal_power(num_send_packet[1], channel_power_gain[1], wc_cluster._W_mw)
                 target_power.append(wc_cluster.estimated_ideal_power[k, 1])
                 predicted_power.append(transmit_power[1])
+            else:
+                wc_cluster.estimated_ideal_power[k, 1] = 0.0
 
         target_power = torch.tensor(target_power)
+        target_power = softmax(target_power, dim=-1)
         predicted_power = torch.tensor(predicted_power)
 
-        target_power = softmax(target_power, dim=-1)
-        reward_power = -wc_cluster.num_devices*(target_power*(target_power.log()-predicted_power.log())).sum().numpy()
+        reward_power = -wc_cluster.num_devices*(target_power*(target_power.log()-predicted_power.log())).sum()
         reward_qos = ((self.current_step-1)*self.reward_qos(agent) + reward_qos)/self.current_step
 
         self.set_reward_qos(agent, reward_qos)
@@ -329,10 +331,6 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         }
         infos = {}
         
-        policy_network_outputs = {
-            agent: actions[agent] for agent in self.agents
-        }
-
         self.compute_actions(policy_network_outputs=actions)
         self.get_feedbacks()
 

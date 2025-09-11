@@ -25,9 +25,10 @@ num_env: 1
 wandb_config:
   project: "PowerAllocationMARL"
 
-# SAC_config:
-#   gamma: 0.99
-#   lr: 1e-2
-#   train_batch_size_per_learner: 256
-#   num_epochs: 1
-#   minibatch_size: 256
+SAC_config:
+  gamma: 0.99
+  tau: 0.005
+  lr: 0.01
+  train_batch_size_per_learner: 256
+  num_epochs: 1
+  minibatch_size: 256
