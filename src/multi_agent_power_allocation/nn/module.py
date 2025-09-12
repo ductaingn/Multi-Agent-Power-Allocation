@@ -1,10 +1,11 @@
 from tianshou.data import Batch
-import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict
-from torch.optim import Adam
+
+import numpy as np
+
 from gymnasium.spaces import Space
 
 
@@ -22,41 +23,55 @@ class BackBone(nn.Module):
 
         self.embed = nn.Linear(iot_device_state_dim, 256)
         self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                256, 4, 512, batch_first=True
-            ), 
-            num_layers=1
+            nn.TransformerEncoderLayer(256, 4, 512, batch_first=True), num_layers=1
         )
-        self.project = nn.Linear(256*self.num_devices, latent_dim)
+        self.project = nn.Linear(256 * self.num_devices, latent_dim)
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         batch_size = obs.shape[0]
         out = obs.reshape(batch_size, self.num_devices, self.state_dim)
-        
+
         out = self.embed(out)
         out = F.relu(out)
 
         out = self.transformer(out)
-        out = out.reshape(batch_size, -1) # Flatten the output
+        out = out.reshape(batch_size, -1)  # Flatten the output
         out = self.project(out)
         out = F.relu(out)
-        
+
         return out
-        
+
 
 class SACPAACtor(nn.Module):
-    def __init__(self, observation_space:Space, action_space:Space, latent_dim, num_devices, log_std_min=LOG_STD_MIN, log_std_max=LOG_STD_MAX, *args, **kwargs):
+    def __init__(
+        self,
+        observation_space: Space,
+        action_space: Space,
+        latent_dim,
+        num_devices,
+        log_std_min=LOG_STD_MIN,
+        log_std_max=LOG_STD_MAX,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
 
-        iot_device_state_dim, action_dim = observation_space.shape[-1]//num_devices, action_space.shape[-1]
+        iot_device_state_dim, action_dim = (
+            observation_space.shape[-1] // num_devices,
+            action_space.shape[-1],
+        )
         self.log_std_min = log_std_min
         self.log_std_max = log_std_max
 
-        self.features_extractor = BackBone(iot_device_state_dim, latent_dim, num_devices)
+        self.features_extractor = BackBone(
+            iot_device_state_dim, latent_dim, num_devices
+        )
 
         self.latent_pi = nn.Sequential(
-            nn.Linear(latent_dim, 256), nn.ReLU(),
-            nn.Linear(256, 256), nn.ReLU(),
+            nn.Linear(latent_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
         )
 
         # Build heads.
@@ -80,16 +95,31 @@ class SACPAACtor(nn.Module):
 
 
 class SACPACritic(nn.Module):
-    def __init__(self, observation_space:Space, action_space:Space, latent_dim, num_devices, *args, **kwargs):
+    def __init__(
+        self,
+        observation_space: Space,
+        action_space: Space,
+        latent_dim,
+        num_devices,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
 
-        iot_device_state_dim, action_dim = observation_space.shape[-1]//num_devices, action_space.shape[-1]
+        iot_device_state_dim, action_dim = (
+            observation_space.shape[-1] // num_devices,
+            action_space.shape[-1],
+        )
 
-        self.features_extractor = BackBone(iot_device_state_dim, latent_dim, num_devices)
+        self.features_extractor = BackBone(
+            iot_device_state_dim, latent_dim, num_devices
+        )
 
         self.latent_q = nn.Sequential(
-            nn.Linear(latent_dim + action_dim, 256), nn.ReLU(),
-            nn.Linear(256, 256), nn.ReLU(),
+            nn.Linear(latent_dim + action_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
         )
 
         self.qf = nn.Linear(256, 1)
@@ -106,5 +136,5 @@ class SACPACritic(nn.Module):
         features = self.features_extractor(obs.view(batch, -1))
         latent = self.latent_q(torch.cat([features, act], dim=1))
         q_value = self.qf(latent)
-        
-        return q_value        
+
+        return q_value

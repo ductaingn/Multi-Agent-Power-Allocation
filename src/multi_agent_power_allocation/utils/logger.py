@@ -2,15 +2,10 @@ import argparse
 import os
 from typing import Callable, Optional, Tuple
 
-from torch.utils.tensorboard import SummaryWriter
-
-from tianshou.utils import BaseLogger, TensorboardLogger
+from tianshou.utils import BaseLogger
 from tianshou.utils.logger.base import LOG_DATA_TYPE
 
-try:
-    import wandb
-except ImportError:
-    pass
+import wandb
 
 
 class Logger(BaseLogger):
@@ -64,16 +59,20 @@ class Logger(BaseLogger):
         if project is None:
             project = os.getenv("WANDB_PROJECT", "PowerAllocationMARL")
 
-        self.wandb_run = wandb.init(
-            project=project,
-            name=name,
-            id=run_id,
-            resume="allow",
-            entity=entity,
-            monitor_gym=monitor_gym,
-            config=config,  # type: ignore,
-            settings=wandb.Settings(code_dir=None)
-        ) if not wandb.run else wandb.run
+        self.wandb_run = (
+            wandb.init(
+                project=project,
+                name=name,
+                id=run_id,
+                resume="allow",
+                entity=entity,
+                monitor_gym=monitor_gym,
+                config=config,  # type: ignore,
+                settings=wandb.Settings(code_dir=None),
+            )
+            if not wandb.run
+            else wandb.run
+        )
         self.wandb_run._label(repo="PowerAllocationMARL")  # type: ignore
 
     def write(self, step_type: str, step: int, data: LOG_DATA_TYPE) -> None:
@@ -99,26 +98,26 @@ class Logger(BaseLogger):
             checkpoint_path = save_checkpoint_fn(epoch, env_step, gradient_step)
 
             checkpoint_artifact = wandb.Artifact(
-                'run_' + self.wandb_run.id + '_checkpoint',  # type: ignore
-                type='model',
+                "run_" + self.wandb_run.id + "_checkpoint",  # type: ignore
+                type="model",
                 metadata={
                     "save/epoch": epoch,
                     "save/env_step": env_step,
                     "save/gradient_step": gradient_step,
                     "checkpoint_path": str(checkpoint_path),
-                }
+                },
             )
             checkpoint_artifact.add_file(str(checkpoint_path))
             self.wandb_run.log_artifact(checkpoint_artifact)  # type: ignore
 
     def restore_data(self) -> Tuple[int, int, int]:
-        checkpoint_artifact = self.wandb_run.use_artifact(    # type: ignore
+        checkpoint_artifact = self.wandb_run.use_artifact(  # type: ignore
             f"run_{self.wandb_run.id}_checkpoint:latest"  # type: ignore
         )
         assert checkpoint_artifact is not None, "W&B dataset artifact doesn't exist"
 
         checkpoint_artifact.download(
-            os.path.dirname(checkpoint_artifact.metadata['checkpoint_path'])
+            os.path.dirname(checkpoint_artifact.metadata["checkpoint_path"])
         )
 
         try:  # epoch / gradient_step

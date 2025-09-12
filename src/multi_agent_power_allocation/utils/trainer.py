@@ -1,32 +1,37 @@
-from multi_agent_power_allocation import BASE_DIR
-from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic, Adam
-from multi_agent_power_allocation.wireless_environment.env import *
-from multi_agent_power_allocation.utils.collector import Collector
-from multi_agent_power_allocation.utils.logger import Logger
+"""
+Trainer
+"""
+
+import os
+from typing import Dict, Literal, Tuple, List
+import pickle
+from copy import deepcopy
+import yaml
+import attrs
 
 from tianshou.data import VectorReplayBuffer
 from tianshou.env import DummyVectorEnv
 from tianshou.env.pettingzoo_env import PettingZooEnv
 from tianshou.policy import SACPolicy, MultiAgentPolicyManager
 from tianshou.trainer import OffpolicyTrainer, BaseTrainer
-from tianshou.utils import MultipleLRSchedulers
 
 from pettingzoo.utils.conversions import parallel_to_aec
 import torch
+from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import numpy as np
 
-import wandb
-import pickle
-import yaml
-import attrs
-from typing import Dict, Literal, Tuple, List
-from tqdm import tqdm
-import os
-from copy import deepcopy
+from multi_agent_power_allocation import BASE_DIR
+from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic
+from multi_agent_power_allocation.wireless_environment.env import (
+    WirelessEnvironmentSACPA,
+    WirelessEnvironmentRandom,
+)
+from multi_agent_power_allocation.utils.collector import Collector
+from multi_agent_power_allocation.utils.logger import Logger
 
 
-def process_default_config(path:str) -> Dict:
+def process_default_config(path: str) -> Dict:
     """
     Process the default yaml config file into keyword arguments to parse Trainer class
 
@@ -34,7 +39,7 @@ def process_default_config(path:str) -> Dict:
     ----------
     path : str
         Path to the config yaml file
-    
+
     Returns:
     -------
     kwargs : Dict
@@ -42,49 +47,35 @@ def process_default_config(path:str) -> Dict:
     """
     try:
         with open(path, "rb") as file:
-            config:Dict = yaml.safe_load(file)
-    except Exception as e:
+            config: Dict = yaml.safe_load(file)
+    except FileExistsError as e:
         print("Error occured when trying to open default config file!")
         print(e)
 
-    algorithm:dict = config.get("algorithm")
-    env_config:dict = config.get("env_config")
-    wc_cluster_config:dict = env_config.get("wc_cluster_config")
-    model_config:dict = config.get("model_config")
+    env_config: Dict = config.get("env_config")
+    wc_cluster_config: Dict = env_config.get("wc_cluster_config")
 
-    env_config.update({
-        "n_warm_up_step": config.get("n_warm_up_step")
-    })
+    env_config.update({"n_warm_up_step": config.get("n_warm_up_step")})
 
-    h_tilde_path = os.path.join(
-        BASE_DIR,
-        "data",
-        wc_cluster_config["h_tilde"]
-    )
+    h_tilde_path = os.path.join(BASE_DIR, "data", wc_cluster_config["h_tilde"])
     if os.path.isfile(h_tilde_path):
-        wc_cluster_config.update({
-            "h_tilde": np.array(
-                pickle.load(
-                    open(h_tilde_path, "rb")
-                )
-            ) 
-        })
+        wc_cluster_config.update(
+            {"h_tilde": np.array(pickle.load(open(h_tilde_path, "rb")))}
+        )
     else:
         raise FileNotFoundError("`h_tilde` path is not valid!")
 
     device_positions_path = os.path.join(
-        BASE_DIR,
-        "data",
-        wc_cluster_config["device_positions"]
+        BASE_DIR, "data", wc_cluster_config["device_positions"]
     )
     if os.path.isfile(device_positions_path):
-        wc_cluster_config.update({
-            "device_positions": np.array(
-                pickle.load(
-                    open(device_positions_path, "rb")
+        wc_cluster_config.update(
+            {
+                "device_positions": np.array(
+                    pickle.load(open(device_positions_path, "rb"))
                 )
-            ) 
-        })
+            }
+        )
     else:
         raise FileNotFoundError("`device_positions` path is not valid!")
 
@@ -92,16 +83,19 @@ def process_default_config(path:str) -> Dict:
     one_hot = np.zeros(wc_cluster_config["num_devices"], dtype=bool)
     one_hot[device_blockages] = True
 
-    wc_cluster_config.update({
-        "device_blockages": one_hot,
-        "n_warm_up_step": config.get("n_warm_up_step")
-    })
+    wc_cluster_config.update(
+        {"device_blockages": one_hot, "n_warm_up_step": config.get("n_warm_up_step")}
+    )
 
     return config
 
 
 @attrs.define
 class Trainer:
+    """
+    Trainer
+    """
+
     algorithm: Literal["SACPA, SACPF, RAQL, Random"]
     env: str = attrs.field(init=False)
     env_config: Dict = attrs.field()
@@ -115,52 +109,60 @@ class Trainer:
     num_env: int = attrs.field(default=1)
     device: str = attrs.field(init=False)
 
-
     @env_config.validator
-    def _check_env_config(self, attribute, value:Dict):
+    def _check_env_config(self, attribute, value: Dict):
         must_have_keys = ["num_cluster", "wc_cluster_config", "max_num_step"]
-        
+
         for key in must_have_keys:
             if key not in value:
                 raise ValueError(f"env_config must contain {key}!")
-        
-        wc_cluster_config:Dict = value.get("wc_cluster_config")
+
+        wc_cluster_config: Dict = value.get("wc_cluster_config")
         if not isinstance(wc_cluster_config, Dict):
             raise ValueError("wc_cluster_config must be a dictionary!")
 
-        must_have_wccc_keys = ["h_tilde", "num_devices", "device_positions", "num_sub_channel", "num_beam", "device_blockages"]
+        must_have_wccc_keys = [
+            "h_tilde",
+            "num_devices",
+            "device_positions",
+            "num_sub_channel",
+            "num_beam",
+            "device_blockages",
+        ]
 
         for key in must_have_wccc_keys:
             if key not in wc_cluster_config:
                 raise ValueError(f"wc_cluster_config must contain {key}!")
 
-
     @model_config.validator
-    def _check_model_config(self, attribute, value:Dict):
+    def _check_model_config(self, attribute, value: Dict):
         must_have_keys = ["latent_dim", "num_devices"]
 
         for key in must_have_keys:
             if key not in value:
                 raise ValueError(f"model_config must contain {key}!")
-            
+
         value.update({"observation_space": self.get_env().observation_space})
         value.update({"action_space": self.get_env().action_space})
-
 
     def __attrs_post_init__(self):
         self.env = f"WirelessEnvironment{self.algorithm}-v2"
         self.max_num_step = self.env_config["max_num_step"]
         self.num_agent = self.env_config["num_cluster"]
         self.policies = [f"agent_{i}_policy" for i in range(self.num_agent)]
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     def get_env(self):
+        env_parallel = None
         if self.algorithm == "SACPA":
             env_parallel = WirelessEnvironmentSACPA(**deepcopy(self.env_config))
-        env_aec = parallel_to_aec(env_parallel)
-        return PettingZooEnv(env_aec)
-
+        if self.algorithm == "Random":
+            env_parallel = WirelessEnvironmentRandom(**deepcopy(self.env_config))
+        if env_parallel is not None:
+            env_aec = parallel_to_aec(env_parallel)
+            return PettingZooEnv(env_aec)
+        else:
+            raise ValueError(f"Unsupported algorithm: {self.algorithm}")
 
     def get_agents(self) -> Tuple[MultiAgentPolicyManager, List]:
         env = self.get_env()
@@ -176,15 +178,17 @@ class Trainer:
             critic2_optim = Adam(critic2.parameters(), lr=self.SAC_config["lr"])
 
             # auto entropy tuning setup
-            target_entropy = float(-np.prod(env.action_space.shape))  
-            log_alpha = torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
+            target_entropy = float(-np.prod(env.action_space.shape))
+            log_alpha = (
+                torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
+            )
             alpha_optim = Adam([log_alpha], lr=self.SAC_config["lr"])
 
             schedulers += [
                 CosineAnnealingLR(actor_optim, T_max=self.env_config["max_num_step"]),
                 CosineAnnealingLR(critic1_optim, T_max=self.env_config["max_num_step"]),
                 CosineAnnealingLR(critic2_optim, T_max=self.env_config["max_num_step"]),
-                CosineAnnealingLR(alpha_optim, T_max=self.env_config["max_num_step"])
+                CosineAnnealingLR(alpha_optim, T_max=self.env_config["max_num_step"]),
             ]
 
             policy = SACPolicy(
@@ -198,18 +202,20 @@ class Trainer:
             )
 
             policies.append(policy)
-        
+
         policy = MultiAgentPolicyManager(
-            policies, 
-            env, 
+            policies,
+            env,
             # lr_scheduler=MultipleLRSchedulers(*schedulers)
         )
 
         return policy, env.agents
 
-    def build(self, run_name:str) -> BaseTrainer:
+    def build(self, run_name: str) -> BaseTrainer:
         # ======== environment setup =========
-        train_envs = DummyVectorEnv([lambda: self.get_env() for _ in range(self.num_env)])
+        train_envs = DummyVectorEnv(
+            [lambda: self.get_env() for _ in range(self.num_env)]
+        )
 
         # ======== agent setup =========
         policy, agents = self.get_agents()
@@ -220,28 +226,32 @@ class Trainer:
             test_interval=1,
             update_interval=1,
             project=self.wandb_config["project"],
-            config={
-                "algorithm": self.algorithm,
-                "env_config": self.env_config
-            },
-            name=run_name
+            config={"algorithm": self.algorithm, "env_config": self.env_config},
+            name=run_name,
         )
 
-        logger.wandb_run.watch(policy.policies[agents[0]].actor, log='all', log_graph=True, log_freq=100)
+        logger.wandb_run.watch(
+            policy.policies[agents[0]].actor, log="all", log_graph=True, log_freq=100
+        )
 
         def log_params(step):
-            logger.wandb_run.log({"Learning rate": policy.policies[agents[0]].actor_optim.param_groups[0]['lr']}, step=step)
+            logger.wandb_run.log(
+                {
+                    "Learning rate": policy.policies[
+                        agents[0]
+                    ].actor_optim.param_groups[0]["lr"]
+                },
+                step=step,
+            )
 
         # ======== collector setup =========
         train_collector = Collector(
             policy=policy,
             env=train_envs,
-            buffer=VectorReplayBuffer(100_000*self.num_env, buffer_num=self.num_env),
-            exploration_noise=True
+            buffer=VectorReplayBuffer(100_000 * self.num_env, buffer_num=self.num_env),
+            exploration_noise=True,
         )
         train_collector.load_logger(logger)
-        # Warm up 
-        # train_collector.collect(self.n_warm_up_step)
 
         # ======== callback setup ========
         def save_best_fn(policy):
@@ -271,7 +281,7 @@ class Trainer:
 
         return trainer
 
-    def train(self, run_name:str) -> Dict[str, float | str]:
+    def train(self, run_name: str) -> Dict[str, float | str]:
         trainer = self.build(run_name)
 
         result = trainer.run()
