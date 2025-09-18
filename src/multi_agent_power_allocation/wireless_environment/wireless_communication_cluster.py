@@ -156,7 +156,7 @@ class WirelessCommunicationCluster:
     _init_signal_power: np.ndarray = attrs.field(init=False)
     signal_power: np.ndarray = attrs.field(init=False)
 
-    channel_power_gain: np.ndarray = attrs.field(init=False)
+    estimated_channel_power: np.ndarray = attrs.field(init=False)
 
     _init_rate: np.ndarray = attrs.field(init=False)
     average_rate: np.ndarray = attrs.field(init=False)
@@ -213,7 +213,7 @@ class WirelessCommunicationCluster:
         self._init_signal_power: np.ndarray = self.update_signal_power(init=True)
         self.signal_power = self._init_signal_power.copy()
 
-        self.channel_power_gain = np.zeros(shape=(self.num_devices, 2))
+        self.estimated_channel_power = np.zeros(shape=(self.num_devices, 2))
 
         # self._init_rate:np.ndarray = self.update_instant_rate(interference=np.zeros_like(self.signal_power), init=True)
         self._init_rate: np.ndarray = np.zeros(shape=(self.num_devices, 2))
@@ -472,21 +472,21 @@ class WirelessCommunicationCluster:
         None
         """
         _signal_power = np.zeros(shape=(2, max(self.num_sub_channel, self.num_beam)))
-        _channel_power_gain = np.zeros(shape=(self.num_devices, 2))
+        _channel_power = np.zeros(shape=(self.num_devices, 2))
 
         for k in range(self.num_devices):
             sub_channel_index = self.allocation[k, 0]
             mW_beam_index = self.allocation[k, 1]
 
             if sub_channel_index != -1:
-                _channel_power_gain[k, 0] = compute_h_sub(
+                _channel_power[k, 0] = compute_h_sub(
                     distance_to_AP=self.distance_to_AP[k],
                     h_tilde=self.h_tilde[self.current_step, 0, k, sub_channel_index],
                 )
 
                 _signal_power[0, sub_channel_index] = signal_power(
                     p=self.transmit_power[k, 0] * self.P_sum,
-                    h=_channel_power_gain[k, 0],
+                    h=_channel_power[k, 0],
                 )
 
             if mW_beam_index != -1:
@@ -496,16 +496,16 @@ class WirelessCommunicationCluster:
                     if blocked
                     else self.LOS_PATH_LOSS[self.current_step, k]
                 )
-                _channel_power_gain[k, 1] = compute_h_mW(
+                _channel_power[k, 1] = compute_h_mW(
                     distance_to_AP=self.distance_to_AP[k], is_blocked=blocked, x=x
                 )
                 _signal_power[1, mW_beam_index] = signal_power(
                     p=self.transmit_power[k, 1] * self.P_sum,
-                    h=_channel_power_gain[k, 1],
+                    h=_channel_power[k, 1],
                 )
 
         self.signal_power = _signal_power
-        self.channel_power_gain = _channel_power_gain
+        self.estimated_channel_power = _channel_power
 
         if init:
             return _signal_power
@@ -679,7 +679,7 @@ class WirelessCommunicationCluster:
 
         self.l_max_estimate = l_max_estimate
 
-    def estimate_average_channel_power(self):
+    def estimate_channel_power(self):
         # for k in range(self.num_devices):
         #     if num_sent_packet[k, 0] > 0:
         #         sub_channel_index = allocation[k,0]
@@ -692,7 +692,7 @@ class WirelessCommunicationCluster:
         #             device_position=self.device_positions[k], device_index=k,
         #             h_tilde=self.h_tilde[self.current_step, 1, k, mW_beam_index])
 
-        self.channel_power_gain
+        self.estimated_channel_power
 
     def get_info(self, reward: Dict[str, float]) -> Dict[str, float]:
         info = {}

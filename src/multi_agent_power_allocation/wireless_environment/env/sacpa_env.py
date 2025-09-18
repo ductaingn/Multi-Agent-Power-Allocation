@@ -261,8 +261,8 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
             )
 
             channel_power_gain = (
-                wc_cluster.channel_power_gain[k, 0],
-                wc_cluster.channel_power_gain[k, 1],
+                wc_cluster.estimated_channel_power[k, 0],
+                wc_cluster.estimated_channel_power[k, 1],
             )
 
             qos_satisfaction = (
