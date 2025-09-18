@@ -16,6 +16,7 @@ from pygame import Surface
 from multi_agent_power_allocation.wireless_environment.wireless_communication_cluster import (
     WirelessCommunicationCluster,
 )
+from multi_agent_power_allocation.wireless_environment.constants import MAP_SIZE
 
 
 @attrs.define
@@ -32,7 +33,7 @@ class WirelessEnvironmentBase(ParallelEnv):
         "is_parallelizable": True,
     }
     reward_coef: Dict[str, float]
-    wc_cluster_config: Dict[str, Any]
+    wc_clusters_configs: List[Dict[str, Any]]
     n_warm_up_step: int = attrs.field()
     num_cluster: int = attrs.field(default=2, kw_only=True)
     max_num_step: int = attrs.field(default=10_000)
@@ -55,30 +56,34 @@ class WirelessEnvironmentBase(ParallelEnv):
         self.agents: List[str] = [str(i) for i in range(self.num_cluster)]
         self.possible_agents = self.agents[:]
 
-        if not (
-            self.wc_cluster_config.get("LOS_PATH_LOSS")
-            and self.wc_cluster_config.get("NLOS_PATH_LOSS")
-        ):
-            num_devices = self.wc_cluster_config.get("num_devices")
-            self.wc_cluster_config.update(
-                {
-                    "LOS_PATH_LOSS": np.random.normal(
-                        0, 5.8, size=(self.max_num_step + 1, num_devices)
-                    )
-                }
-            )
-            self.wc_cluster_config.update(
-                {
-                    "NLOS_PATH_LOSS": np.random.normal(
-                        0, 8.7, size=(self.max_num_step + 1, num_devices)
-                    )
-                }
-            )
+        for i in range(self.num_cluster):
+            if not (
+                self.wc_clusters_configs[i].get("LOS_PATH_LOSS")
+                and self.wc_clusters_configs[i].get("NLOS_PATH_LOSS")
+            ):
+                num_devices = self.wc_clusters_configs[i].get("num_devices")
+                self.wc_clusters_configs[i].update(
+                    {
+                        "LOS_PATH_LOSS": np.random.normal(
+                            0, 5.8, size=(self.max_num_step + 1, num_devices)
+                        )
+                    }
+                )
+                self.wc_clusters_configs[i].update(
+                    {
+                        "NLOS_PATH_LOSS": np.random.normal(
+                            0, 8.7, size=(self.max_num_step + 1, num_devices)
+                        )
+                    }
+                )
 
-        self.wc_clusters: Dict[str, WirelessCommunicationCluster] = {
-            id: WirelessCommunicationCluster(cluster_id=id, **self.wc_cluster_config)
-            for id in self.agents
-        }
+            self.wc_clusters.update(
+                {
+                    self.agents[i]: WirelessCommunicationCluster(
+                        cluster_id=i, **self.wc_clusters_configs[i]
+                    )
+                }
+            )
 
     def reset(self, seed=None, options=None):
         raise NotImplementedError("This method should be implemented by subclasses.")
@@ -194,9 +199,11 @@ class WirelessEnvironmentBase(ParallelEnv):
         ax_pos.set_title("Access Points and IoT Devices")
         ax_pos.set_xlabel("X")
         ax_pos.set_ylabel("Y")
+        ax_pos.set_xlim(-MAP_SIZE[0] / 2, MAP_SIZE[0] / 2)
+        ax_pos.set_ylim(-MAP_SIZE[1] / 2, MAP_SIZE[1] / 2)
 
         # Plot each cluster
-        colors = plt.cm.get_cmap("tab10", self.num_cluster)
+        colors = plt.get_cmap("tab10", self.num_cluster)
         for idx, (cid, cluster) in enumerate(self.wc_clusters.items()):
             ap_x, ap_y = cluster.AP_position
             dev_positions = np.array(cluster.device_positions)
@@ -216,7 +223,19 @@ class WirelessEnvironmentBase(ParallelEnv):
                 label=f"Cluster {cid} Devices",
             )
 
-        ax_pos.legend(loc="upper right")
+            # Plot obstacles
+            for pos in cluster.obstacle_positions:
+                start_point, end_point = pos
+
+                # Extract x and y coordinates
+                x_coords = [start_point[0], end_point[0]]
+                y_coords = [start_point[1], end_point[1]]
+
+                # Plot the line segment
+                ax_pos.plot(x_coords, y_coords, "k-", linewidth=4)
+
+        ax_pos.plot([], [], "k-", linewidth=2, label="Obstacles")
+        ax_pos.legend(loc="upper left")
         ax_pos.grid(True, linestyle="--", alpha=0.5)
 
         # === RIGHT HALF: Stats per cluster ===
@@ -228,8 +247,13 @@ class WirelessEnvironmentBase(ParallelEnv):
             # LEFT: Bar chart (packets per device)
             ax_bar = fig.add_subplot(inner_gs[0, 0])
             packets = cluster.num_send_packet.sum(axis=1)
-            ax_bar.bar(range(len(packets)), packets, color=colors(idx))
-            ax_bar.set_title(f"Cluster {cid} Packets")
+            ax_bar.bar(
+                range(len(packets)),
+                packets,
+                color=colors(idx),
+                tick_label=[f"Device {i+1}" for i in range(cluster.num_devices)],
+            )
+            ax_bar.set_title(f"Cluster {cid} Num. Sent Packets")
             ax_bar.set_xlabel("Device ID")
             ax_bar.set_ylabel("Packets")
 
@@ -255,7 +279,7 @@ class WirelessEnvironmentBase(ParallelEnv):
             size = canvas.get_width_height()
 
             if self.window is None:
-                pygame.init()
+                pygame.init()  # pylint:disable=no-member
                 self.clock = pygame.time.Clock()
 
                 window_size = tuple(map(int, fig.get_size_inches() * fig.dpi))
@@ -270,7 +294,7 @@ class WirelessEnvironmentBase(ParallelEnv):
             pygame.display.flip()
 
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                if event.type == pygame.QUIT:  # pylint:disable=no-member
                     self.close()
 
         elif mode == "rgb_array":
@@ -281,6 +305,6 @@ class WirelessEnvironmentBase(ParallelEnv):
 
     def close(self):
         """Closes the environment and terminates its visualization."""
-        pygame.quit()
+        pygame.quit()  # pylint:disable=no-member
         self.window = None
         self.closed = True

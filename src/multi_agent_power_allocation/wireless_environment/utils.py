@@ -158,10 +158,10 @@ def generate_h_tilde(
     num_device: int,
     num_subchannel: int,
     num_beam: int,
-    mu: float = 0,
-    sigma: float = 1,
-    save: bool = True,
-    save_path: str = "environment/scenario_1/h_tilde.pickle",
+    mu: float,
+    sigma: float,
+    save: bool,
+    save_path: str,
 ) -> np.ndarray:
     """
     Generate complex channel coefficients for multiple devices, subchannels, and beams over a specified number of timesteps.
@@ -195,12 +195,12 @@ def generate_h_tilde(
         h_tilde_k_sub, h_tilde_k_mw = [], []
         for n in range(num_subchannel):
             h_tilde_k_sub.append(
-                generate_h_tilde_device_channel(mu, sigma, num_timestep)
+                generate_h_tilde_device_channel(num_timestep, mu, sigma)
             )
 
         for m in range(num_beam):
             h_tilde_k_mw.append(
-                generate_h_tilde_device_channel(mu, sigma, num_timestep)
+                generate_h_tilde_device_channel(num_timestep, mu, sigma)
             )
 
         h_tilde.append(np.array([h_tilde_k_sub, h_tilde_k_mw]))
@@ -343,3 +343,54 @@ def compute_rate(w: float, sinr: float) -> float:
     rate = w * np.log2(1 + sinr)
 
     return rate
+
+
+def on_segment(p, q, r) -> bool:
+    """
+    Checks if point q lies on the line segment pr.
+    p, q, and r are NumPy arrays of shape (2,).
+    """
+    return np.all(q >= np.minimum(p, r)) and np.all(q <= np.maximum(p, r))
+
+
+def segments_intersect(s1, s2) -> bool:
+    """
+    Check if two segment intersect
+
+    Parameters
+    ----------
+    s1 : np.ndarray
+        Segment one
+    s2 : np.ndarray
+        Segment two
+
+    Returns:
+        bool
+            True if two segments intersect
+    """
+
+    p1, p2 = s1[0], s1[1]
+    p3, p4 = s2[0], s2[1]
+
+    def direction(a, b, c):
+        return np.cross(c - a, b - a)
+
+    d1 = direction(p1, p2, p3)
+    d2 = direction(p1, p2, p4)
+    d3 = direction(p3, p4, p1)
+    d4 = direction(p3, p4, p2)
+
+    # Proper intersection (general case)
+    if (d1 * d2 < 0) and (d3 * d4 < 0):
+        return True
+
+    if d1 == 0 and on_segment(p1, p2, p3):
+        return True
+    if d2 == 0 and on_segment(p1, p2, p4):
+        return True
+    if d3 == 0 and on_segment(p3, p4, p1):
+        return True
+    if d4 == 0 and on_segment(p3, p4, p2):
+        return True
+
+    return False

@@ -3,18 +3,25 @@ Wireless Communication Cluster Module
 This module defines the base class for wireless communication cluster, each cluster represents a group of one Access Point (AP) serves K IoT devices through wireless communication.
 """
 
+import os
 from typing import Dict, Union
 import attrs
+import random
+import json
 
 import numpy as np
 
+from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.wireless_environment.utils import (
     signal_power,
     gamma,
     compute_rate,
     compute_h_sub,
     compute_h_mW,
+    generate_h_tilde,
+    segments_intersect,
 )
+from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
 
 
 @attrs.define(slots=False)
@@ -52,10 +59,8 @@ class WirelessCommunicationCluster:
         metadata={"description": "Number of mmWave beam in the cluster"}
     )
 
-    device_blockages: list = attrs.field(
-        metadata={
-            "description": "Hash array indicating whether each device is blocked by obstacles."
-        }
+    obstacle_positions: np.ndarray = attrs.field(
+        metadata={"description": "Positions of obstacles in the cluster."}
     )
 
     LOS_PATH_LOSS: np.ndarray = attrs.field(
@@ -175,10 +180,10 @@ class WirelessCommunicationCluster:
             self.num_devices == self.device_positions.shape[0]
         ), f"Number of devices ({self.num_devices}) doesn't match the shape of device positions ({self.device_positions.shape})"
         assert (
-            self.num_sub_channel == self.h_tilde.shape[-1]
+            self.num_sub_channel <= self.h_tilde.shape[-1]
         ), "Number of subchannel doesn't match the shape of h_tilde"
         assert (
-            self.num_beam == self.h_tilde.shape[-1]
+            self.num_beam <= self.h_tilde.shape[-1]
         ), "Number of beam doesn't match the shape of h_tilde"
 
         self.distance_to_AP = np.linalg.norm(
@@ -255,16 +260,122 @@ class WirelessCommunicationCluster:
         )  # Unit: Percentage
 
     @classmethod
-    def generate_postitions(cls, id):
+    def generate_postitions(
+        cls,
+        scenario_name: str,
+        num_cluster: int,
+        num_device: int,
+    ):
         """
         Generate AP, IoT devices and obstacles positions
+        They are fixed for now
         """
+        clusters = []
+        clusters.append(
+            {
+                "AP": [100.0, 100.0],
+                "devices": [[120.0, 100.0], [100.0, 120.0], [15.0, 20.0]],
+                "obstacles": [[[90.0, 110.0], [110.0, 110.0]]],
+            }
+        )
+        clusters.append(
+            {
+                "AP": [-100.0, -100.0],
+                "devices": [[-80.0, -100.0], [-100.0, -80.0], [-185.0, -180.0]],
+                "obstacles": [[[-90.0, -90.0], [-110.0, -90.0]]],
+            }
+        )
+
+        if num_cluster >= 2:
+            raise NotImplementedError("Supported upto 2 APs only!")
+
+        for i in range(num_cluster):
+
+            AP_pos = clusters[i]["AP"]
+            for k in range(num_device):
+
+                if k >= 3:
+                    clusters[i]["devices"].append(
+                        [
+                            np.random.randint(
+                                AP_pos[0] - AP_RANGE / 2, AP_pos[1] - AP_RANGE / 2
+                            ),
+                            np.random.randint(
+                                AP_pos[1] - AP_RANGE / 2, AP_pos[1] - AP_RANGE / 2
+                            ),
+                        ]
+                    )
+
+            save_path = os.path.join(
+                BASE_DIR, "data", scenario_name, f"cluster_{i}", "positions.json"
+            )
+
+            with open(save_path, "wt", encoding="utf-8") as file:
+                json.dump(clusters[i], file, indent=4)
 
     @classmethod
-    def generate_h_tilde(cls):
+    def generate_h_tilde(
+        cls,
+        scenario_name: str,
+        num_cluster: int,
+        num_timestep: int,
+        num_device: int,
+        num_subchannel: int,
+        num_beam: int,
+        mu: float,
+        sigma: float,
+    ):
         """
         Generate channel power gain for all IoT devices and subchannel/beam pair
         """
+        for i in range(num_cluster):
+            save_path = os.path.join(
+                BASE_DIR, "data", scenario_name, f"cluster_{i}", "h_tilde.pickle"
+            )
+
+            generate_h_tilde(
+                num_timestep + 1,
+                num_device,
+                num_subchannel,
+                num_beam,
+                mu,
+                sigma,
+                True,
+                save_path,
+            )
+
+    @classmethod
+    def generate_data(
+        cls,
+        scenario_name: str = "scenario_1",
+        num_cluster: int = 2,
+        num_timestep: int = 10_000,
+        num_device: int = 3,
+        num_subchannel: int = 5,
+        num_beam: int = 5,
+        mu: float = 0,
+        sigma: float = 1,
+        seed: int = 1,
+    ):
+        np.random.seed(seed)
+        random.seed(seed)
+        for i in range(num_cluster):
+            os.makedirs(
+                os.path.join(BASE_DIR, "data", scenario_name, f"cluster_{i}"),
+                exist_ok=True,
+            )
+
+        cls.generate_h_tilde(
+            scenario_name,
+            num_cluster,
+            num_timestep,
+            num_device,
+            num_subchannel,
+            num_beam,
+            mu,
+            sigma,
+        )
+        cls.generate_postitions(scenario_name, num_cluster, num_device)
 
     def set_num_send_packet(self, num_send_packet: np.ndarray) -> None:
         self.num_send_packet = num_send_packet.copy()
@@ -302,16 +413,16 @@ class WirelessCommunicationCluster:
 
         for k in range(self.num_devices):
             if self.num_send_packet[k, 0] > 0 and self.num_send_packet[k, 1] == 0:
-                rand_index = np.random.randint(0, len(rand_sub))
+                rand_index = int(np.random.randint(0, len(rand_sub)))
                 sub[k] = rand_sub[rand_index]
                 rand_sub.pop(rand_index)
             elif self.num_send_packet[k, 0] == 0 and self.num_send_packet[k, 1] > 0:
-                rand_index = np.random.randint(0, len(rand_mW))
+                rand_index = int(np.random.randint(0, len(rand_mW)))
                 mW[k] = rand_mW[rand_index]
                 rand_mW.pop(rand_index)
             else:
-                rand_sub_index = np.random.randint(0, len(rand_sub))
-                rand_mW_index = np.random.randint(0, len(rand_mW))
+                rand_sub_index = int(np.random.randint(0, len(rand_sub)))
+                rand_mW_index = int(np.random.randint(0, len(rand_mW)))
 
                 sub[k] = rand_sub[rand_sub_index]
                 mW[k] = rand_mW[rand_mW_index]
@@ -324,6 +435,28 @@ class WirelessCommunicationCluster:
 
         if init:
             return allocation
+
+    def is_blocked(self, device_index: int) -> bool:
+        """
+        Check whether a device is blocked from AP by obstacles
+
+        Parameters
+        ----------
+        device_index : int
+            The index of the IoT device
+
+        Returns
+        -------
+        res : bool
+            Whether the device is blocked or not
+        """
+        for obs in self.obstacle_positions:
+            if segments_intersect(
+                obs, np.array([self.device_positions[device_index], self.AP_position])
+            ):
+                return True
+
+        return False
 
     def update_signal_power(self, init: bool = False) -> Union[None, np.ndarray]:
         """
@@ -357,14 +490,14 @@ class WirelessCommunicationCluster:
                 )
 
             if mW_beam_index != -1:
-                is_blocked = self.device_blockages[k]
+                blocked = self.is_blocked(k)
                 x = (
                     self.NLOS_PATH_LOSS[self.current_step, k]
-                    if is_blocked
+                    if blocked
                     else self.LOS_PATH_LOSS[self.current_step, k]
                 )
                 _channel_power_gain[k, 1] = compute_h_mW(
-                    distance_to_AP=self.distance_to_AP[k], is_blocked=is_blocked, x=x
+                    distance_to_AP=self.distance_to_AP[k], is_blocked=blocked, x=x
                 )
                 _signal_power[1, mW_beam_index] = signal_power(
                     p=self.transmit_power[k, 1] * self.P_sum,

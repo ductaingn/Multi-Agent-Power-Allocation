@@ -33,7 +33,6 @@ LOS_PATH_LOSS = np.random.normal(0, 5.8, NUM_OF_FRAME + 1)
 # NLoS Path loss - mmWave
 NLOS_PATH_LOSS = np.random.normal(0, 8.7, NUM_OF_FRAME + 1)
 
-# initialize position of AP.
-# the AP was located at the central of the area
-# the position of each AP is the constant
-AP_POSITION = (0, 0)
+# Map specs
+AP_RANGE = 142
+MAP_SIZE = (400, 400)

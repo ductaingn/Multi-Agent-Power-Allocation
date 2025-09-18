@@ -1,4 +1,4 @@
-from .trainer import Trainer, process_default_config
+from .trainer import Trainer, parse_config
 from .collector import Collector
 
-__all__ = ["Trainer", "process_default_config", "Collector"]
+__all__ = ["Trainer", "parse_config", "Collector"]

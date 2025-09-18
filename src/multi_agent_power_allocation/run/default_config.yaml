@@ -2,24 +2,22 @@ algorithm: "SACPA"  #Literal["SACPA, SACPF, RAQL, Random"]
 
 env_config:
   render_mode: "human"
-  num_cluster: 1
+  num_cluster: 2
   max_num_step: 10000
+  seed: 1
   
   reward_coef:
     reward_qos: 1.0
     reward_power: 10.0
 
   wc_cluster_config:
-    h_tilde: "scenario_1/h_tilde.pickle" # should be placed in src/data folder
-    num_devices: 10
-    device_positions: "scenario_1/device_positions.pickle" # should be placed in src/data folder
-    num_sub_channel: 16
-    num_beam: 16
-    device_blockages: [2, 6]
-  
+    scenario: "scenario_1" # should be placed in src/data folder
+    num_devices: 3
+    num_sub_channel: 5
+    num_beam: 5
+
 model_config:
   latent_dim: 256
-  num_devices: 10
 
 num_env: 1
 n_warm_up_step: 100

@@ -1,7 +1,7 @@
 import os
 import argparse
 
-from multi_agent_power_allocation.utils.trainer import Trainer, process_default_config
+from multi_agent_power_allocation.utils.trainer import Trainer, parse_config
 from multi_agent_power_allocation import BASE_DIR
 
 
@@ -26,9 +26,8 @@ args = arg_parser.parse_args()
 
 
 if __name__ == "__main__":
-    default_config_path = args.config_path
-    default_config: dict = process_default_config(default_config_path)
-    config = default_config
+    config_path = args.config_path
+    config: dict = parse_config(config_path)
 
     trainer = Trainer(**config)
     result = trainer.train(args.name_of_run)

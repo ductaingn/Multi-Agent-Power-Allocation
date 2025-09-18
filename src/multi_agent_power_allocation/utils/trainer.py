@@ -7,6 +7,7 @@ from typing import Dict, Literal, Tuple, List
 import pickle
 from copy import deepcopy
 import yaml
+import json
 import attrs
 
 from tianshou.data import VectorReplayBuffer
@@ -31,7 +32,7 @@ from multi_agent_power_allocation.utils.collector import Collector
 from multi_agent_power_allocation.utils.logger import Logger
 
 
-def process_default_config(path: str) -> Dict:
+def parse_config(path: str) -> Dict:
     """
     Process the default yaml config file into keyword arguments to parse Trainer class
 
@@ -52,40 +53,53 @@ def process_default_config(path: str) -> Dict:
         print("Error occured when trying to open default config file!")
         print(e)
 
+    model_config: Dict = config.get("model_config")
     env_config: Dict = config.get("env_config")
     wc_cluster_config: Dict = env_config.get("wc_cluster_config")
+    num_cluster: int = env_config["num_cluster"]
 
-    env_config.update({"n_warm_up_step": config.get("n_warm_up_step")})
-
-    h_tilde_path = os.path.join(BASE_DIR, "data", wc_cluster_config["h_tilde"])
-    if os.path.isfile(h_tilde_path):
-        wc_cluster_config.update(
-            {"h_tilde": np.array(pickle.load(open(h_tilde_path, "rb")))}
+    parsed_wc_clusters_configs = []
+    for i in range(num_cluster):
+        h_tilde_path = os.path.join(
+            BASE_DIR,
+            "data",
+            wc_cluster_config["scenario"],
+            f"cluster_{i}",
+            "h_tilde.pickle",
         )
-    else:
-        raise FileNotFoundError("`h_tilde` path is not valid!")
 
-    device_positions_path = os.path.join(
-        BASE_DIR, "data", wc_cluster_config["device_positions"]
-    )
-    if os.path.isfile(device_positions_path):
-        wc_cluster_config.update(
+        positions_path = os.path.join(
+            BASE_DIR,
+            "data",
+            wc_cluster_config["scenario"],
+            f"cluster_{i}",
+            "positions.json",
+        )
+
+        if not os.path.isfile(h_tilde_path):
+            raise FileNotFoundError("`h_tilde` path is not valid!")
+
+        if not os.path.isfile(positions_path):
+            raise FileNotFoundError("`positions` path is not valid!")
+
+        positions: Dict = json.load(open(positions_path, "rt", encoding="utf-8"))
+        parsed_wc_clusters_configs.append(
             {
-                "device_positions": np.array(
-                    pickle.load(open(device_positions_path, "rb"))
-                )
+                "h_tilde": pickle.load(open(h_tilde_path, "rb")),
+                "num_devices": wc_cluster_config["num_devices"],
+                "AP_position": np.array(positions["AP"]),
+                "device_positions": np.array(positions["devices"]),
+                "obstacle_positions": np.array(positions["obstacles"]),
+                "num_sub_channel": wc_cluster_config["num_sub_channel"],
+                "num_beam": wc_cluster_config["num_beam"],
+                "n_warm_up_step": config["n_warm_up_step"],
             }
         )
-    else:
-        raise FileNotFoundError("`device_positions` path is not valid!")
 
-    device_blockages = np.array(wc_cluster_config["device_blockages"]) - 1
-    one_hot = np.zeros(wc_cluster_config["num_devices"], dtype=bool)
-    one_hot[device_blockages] = True
-
-    wc_cluster_config.update(
-        {"device_blockages": one_hot, "n_warm_up_step": config.get("n_warm_up_step")}
-    )
+    model_config.update({"num_devices": wc_cluster_config["num_devices"]})
+    env_config.pop("wc_cluster_config")
+    env_config.update({"n_warm_up_step": config.get("n_warm_up_step")})
+    env_config.update({"wc_clusters_configs": parsed_wc_clusters_configs})
 
     return config
 
@@ -111,28 +125,30 @@ class Trainer:
 
     @env_config.validator
     def _check_env_config(self, attribute, value: Dict):
-        must_have_keys = ["num_cluster", "wc_cluster_config", "max_num_step"]
+        must_have_keys = ["num_cluster", "wc_clusters_configs", "max_num_step"]
 
         for key in must_have_keys:
             if key not in value:
                 raise ValueError(f"env_config must contain {key}!")
 
-        wc_cluster_config: Dict = value.get("wc_cluster_config")
-        if not isinstance(wc_cluster_config, Dict):
-            raise ValueError("wc_cluster_config must be a dictionary!")
+        wc_clusters_configs: List[Dict] = value.get("wc_clusters_configs")
+        if not isinstance(wc_clusters_configs, List):
+            raise ValueError("wc_cluster_config must be a list!")
 
         must_have_wccc_keys = [
             "h_tilde",
             "num_devices",
+            "AP_position",
             "device_positions",
+            "obstacle_positions",
             "num_sub_channel",
             "num_beam",
-            "device_blockages",
         ]
 
-        for key in must_have_wccc_keys:
-            if key not in wc_cluster_config:
-                raise ValueError(f"wc_cluster_config must contain {key}!")
+        for config in wc_clusters_configs:
+            for key in must_have_wccc_keys:
+                if key not in config:
+                    raise ValueError(f"wc_cluster_config must contain {key}!")
 
     @model_config.validator
     def _check_model_config(self, attribute, value: Dict):
