@@ -157,6 +157,7 @@ class WirelessCommunicationCluster:
     signal_power: np.ndarray = attrs.field(init=False)
 
     estimated_channel_power: np.ndarray = attrs.field(init=False)
+    estimated_CGINR: np.ndarray = attrs.field(init=False)
 
     _init_rate: np.ndarray = attrs.field(init=False)
     average_rate: np.ndarray = attrs.field(init=False)
@@ -214,6 +215,7 @@ class WirelessCommunicationCluster:
         self.signal_power = self._init_signal_power.copy()
 
         self.estimated_channel_power = np.zeros(shape=(self.num_devices, 2))
+        self.estimated_CGINR = np.zeros(shape=(self.num_devices, 2))
 
         # self._init_rate:np.ndarray = self.update_instant_rate(interference=np.zeros_like(self.signal_power), init=True)
         self._init_rate: np.ndarray = np.zeros(shape=(self.num_devices, 2))
@@ -693,6 +695,31 @@ class WirelessCommunicationCluster:
         #             h_tilde=self.h_tilde[self.current_step, 1, k, mW_beam_index])
 
         self.estimated_channel_power
+
+    def estimate_CGINR(self):
+        """
+        Estimate Channel Gain to Interference plus Noise Ratio of the previous step base on ACK/NACK feedback only, to calculate reward. (Lower bound estimation)
+        """
+        for k in range(self.num_devices):
+            if self.num_send_packet[k, 0] > 0:
+                self.estimated_CGINR[k, 0] = (
+                    2
+                    ** (
+                        (self.num_received_packet[k, 0] * self.D)
+                        / (self._W_sub * self.T)
+                    )
+                    - 1
+                ) / (self.transmit_power[k, 0] * self.P_sum)
+
+            if self.num_send_packet[k, 1] > 0:
+                self.estimated_CGINR[k, 1] = (
+                    2
+                    ** (
+                        (self.num_received_packet[k, 1] * self.D)
+                        / (self._W_sub * self.T)
+                    )
+                    - 1
+                ) / (self.transmit_power[k, 1] * self.P_sum)
 
     def get_info(self, reward: Dict[str, float]) -> Dict[str, float]:
         info = {}

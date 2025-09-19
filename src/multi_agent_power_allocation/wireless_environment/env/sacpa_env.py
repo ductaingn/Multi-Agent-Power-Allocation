@@ -236,16 +236,13 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         """
         wc_cluster = self.wc_clusters[agent]
 
-        def estimate_ideal_power(num_send_packet, channel_power, W):
-            if channel_power == 0:
+        def estimate_ideal_power(num_send_packet, CGINR, W):
+            if CGINR == 0:
                 return wc_cluster.P_sum
 
             ideal_power = (
-                (2 ** ((num_send_packet * wc_cluster.D) / (W * wc_cluster.T)) - 1)
-                * W
-                * wc_cluster.Sigma_sqr
-                / channel_power
-            )
+                2 ** ((num_send_packet * wc_cluster.D) / (W * wc_cluster.T)) - 1
+            ) / CGINR
             return min(ideal_power / wc_cluster.P_sum, 1.0)
 
         reward_qos = 0
@@ -260,9 +257,9 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
                 wc_cluster.transmit_power[k, 1],
             )
 
-            channel_power_gain = (
-                wc_cluster.estimated_channel_power[k, 0],
-                wc_cluster.estimated_channel_power[k, 1],
+            CGINR = (
+                wc_cluster.estimated_CGINR[k, 0],
+                wc_cluster.estimated_CGINR[k, 1],
             )
 
             qos_satisfaction = (
@@ -289,7 +286,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
             if num_send_packet[0] > 0:
                 wc_cluster.estimated_ideal_power[k, 0] = estimate_ideal_power(
-                    num_send_packet[0], channel_power_gain[0], wc_cluster._W_sub
+                    num_send_packet[0], CGINR[0], wc_cluster._W_sub
                 )
                 target_power.append(wc_cluster.estimated_ideal_power[k, 0])
                 predicted_power.append(transmit_power[0])
@@ -298,7 +295,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
             if num_send_packet[1] > 0:
                 wc_cluster.estimated_ideal_power[k, 1] = estimate_ideal_power(
-                    num_send_packet[1], channel_power_gain[1], wc_cluster._W_mw
+                    num_send_packet[1], CGINR[1], wc_cluster._W_mw
                 )
                 target_power.append(wc_cluster.estimated_ideal_power[k, 1])
                 predicted_power.append(transmit_power[1])
