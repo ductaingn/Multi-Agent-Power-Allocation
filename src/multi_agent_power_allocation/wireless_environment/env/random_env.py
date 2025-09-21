@@ -260,7 +260,7 @@ class WirelessEnvironmentRandom(WirelessEnvironmentBase):
 
             if num_send_packet[0] > 0:
                 wc_cluster.estimated_ideal_power[k, 0] = estimate_ideal_power(
-                    num_send_packet[0], channel_power_gain[0], wc_cluster._W_sub
+                    num_send_packet[0], channel_power_gain[0], wc_cluster.W_sub
                 )
                 target_power.append(wc_cluster.estimated_ideal_power[k, 0])
                 predicted_power.append(transmit_power[0])
@@ -269,7 +269,7 @@ class WirelessEnvironmentRandom(WirelessEnvironmentBase):
 
             if num_send_packet[1] > 0:
                 wc_cluster.estimated_ideal_power[k, 1] = estimate_ideal_power(
-                    num_send_packet[1], channel_power_gain[1], wc_cluster._W_mw
+                    num_send_packet[1], channel_power_gain[1], wc_cluster.W_mw
                 )
                 target_power.append(wc_cluster.estimated_ideal_power[k, 1])
                 predicted_power.append(transmit_power[1])

@@ -137,8 +137,8 @@ class WirelessCommunicationCluster:
         metadata={"description": "Noise power at device sides (-169 dBm/Hz)."},
     )
 
-    _W_sub: float = attrs.field(init=False)
-    _W_mw: float = attrs.field(init=False)
+    W_sub: float = attrs.field(init=False)
+    W_mw: float = attrs.field(init=False)
 
     _init_num_send_packet: np.ndarray = attrs.field(init=False)
     num_send_packet: np.ndarray = attrs.field(init=False)
@@ -175,8 +175,8 @@ class WirelessCommunicationCluster:
         """
         Post-initialization method to validate the cluster configuration.
         """
-        self._W_sub = self.W_sub_total / self.n_sub_channels
-        self._W_mw = self.W_mw_total / self.n_beams
+        self.W_sub = self.W_sub_total / self.n_sub_channels
+        self.W_mw = self.W_mw_total / self.n_beams
         assert (
             self.num_devices == self.device_positions.shape[0]
         ), f"Number of devices ({self.num_devices}) doesn't match the shape of device positions ({self.device_positions.shape})"
@@ -232,9 +232,9 @@ class WirelessCommunicationCluster:
             [
                 [
                     compute_rate(
-                        w=self._W_sub,
+                        w=self.W_sub,
                         sinr=gamma(
-                            w=self._W_sub,
+                            w=self.W_sub,
                             s=self.P_sum,
                             interference=0,
                             noise=self.Sigma_sqr,
@@ -244,9 +244,9 @@ class WirelessCommunicationCluster:
                 ],
                 [
                     compute_rate(
-                        w=self._W_mw,
+                        w=self.W_mw,
                         sinr=gamma(
-                            w=self._W_mw,
+                            w=self.W_mw,
                             s=self.P_sum,
                             interference=0,
                             noise=self.Sigma_sqr,
@@ -539,25 +539,25 @@ class WirelessCommunicationCluster:
 
             if sub_channel_index != -1:
                 sinr = gamma(
-                    w=self._W_sub,
+                    w=self.W_sub,
                     s=self.signal_power[0, sub_channel_index],
                     interference=interference[0, sub_channel_index],
                     noise=self.Sigma_sqr,
                 )
 
                 rate[k, 0] = compute_rate(
-                    w=self._W_sub,
+                    w=self.W_sub,
                     sinr=sinr,
                 )
 
             if mW_beam_index != -1:
                 sinr = gamma(
-                    w=self._W_mw,
+                    w=self.W_mw,
                     s=self.signal_power[1, mW_beam_index],
                     interference=interference[1, mW_beam_index],
                     noise=self.Sigma_sqr,
                 )
-                rate[k, 1] = compute_rate(w=self._W_mw, sinr=sinr)
+                rate[k, 1] = compute_rate(w=self.W_mw, sinr=sinr)
 
         self.instant_rate = rate
 
@@ -706,7 +706,7 @@ class WirelessCommunicationCluster:
                     2
                     ** (
                         (self.num_received_packet[k, 0] * self.D)
-                        / (self._W_sub * self.T)
+                        / (self.W_sub * self.T)
                     )
                     - 1
                 ) / (self.transmit_power[k, 0] * self.P_sum)
@@ -716,7 +716,7 @@ class WirelessCommunicationCluster:
                     2
                     ** (
                         (self.num_received_packet[k, 1] * self.D)
-                        / (self._W_sub * self.T)
+                        / (self.W_sub * self.T)
                     )
                     - 1
                 ) / (self.transmit_power[k, 1] * self.P_sum)

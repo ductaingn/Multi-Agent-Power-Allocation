@@ -1,21 +1,26 @@
-from .base_env import WirelessEnvironmentBase
-from ..wireless_communication_cluster import WirelessCommunicationCluster
+from typing import Dict
+import attrs
+
 import torch
 from torch.nn.functional import softmax
 import numpy as np
 import gymnasium as gym
-from typing import Dict, List
-import attrs
+
+from .base_env import WirelessEnvironmentBase
+from multi_agent_power_allocation.wireless_environment.wireless_communication_cluster import (
+    WirelessCommunicationCluster,
+)
 
 
+@attrs.define
 class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
+        self._reward_qos: Dict[int, float] = {
+            agent: 0.0 for agent in self.agents
+        }  # pylint:disable=attribute-defined-outside-init
 
     def reward_qos(self, agent: str) -> float:
-        if not hasattr(self, "_reward_qos"):
-            self._reward_qos: Dict[int, float] = {agent: 0.0 for agent in self.agents}
-
         return self._reward_qos[agent]
 
     def set_reward_qos(self, agent: str, value: float) -> None:
@@ -286,7 +291,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
             if num_send_packet[0] > 0:
                 wc_cluster.estimated_ideal_power[k, 0] = estimate_ideal_power(
-                    num_send_packet[0], CGINR[0], wc_cluster._W_sub
+                    num_send_packet[0], CGINR[0], wc_cluster.W_sub
                 )
                 target_power.append(wc_cluster.estimated_ideal_power[k, 0])
                 predicted_power.append(transmit_power[0])
@@ -295,7 +300,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
             if num_send_packet[1] > 0:
                 wc_cluster.estimated_ideal_power[k, 1] = estimate_ideal_power(
-                    num_send_packet[1], CGINR[1], wc_cluster._W_mw
+                    num_send_packet[1], CGINR[1], wc_cluster.W_mw
                 )
                 target_power.append(wc_cluster.estimated_ideal_power[k, 1])
                 predicted_power.append(transmit_power[1])
@@ -346,6 +351,13 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         _state[:, 7] = wc_cluster.transmit_power[:, 1].copy() * 10.0
 
         return _state
+
+    def state(self):
+        states = []
+        for agent in self.agents:
+            states.append(self._get_state(agent))
+
+        return np.array(states)
 
     def step(self, actions):
         observations = {}
