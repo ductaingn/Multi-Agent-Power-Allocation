@@ -137,7 +137,7 @@ class Collector(Collector):
 
             if len(info) > 1:
                 warnings.warn("Logging first environment info only!")
-            self.logger.wandb_run.log(info[0], step=self.collect_step)
+            self.logger.write(step_type=None, step=self.collect_step, data=info[0])
 
             self.data.update(
                 obs_next=obs_next,

@@ -142,9 +142,11 @@ class WirelessCommunicationCluster:
 
     _init_num_send_packet: np.ndarray = attrs.field(init=False)
     num_send_packet: np.ndarray = attrs.field(init=False)
+    num_sent_packet_acc: np.ndarray = attrs.field(init=False)
 
     _init_num_received_packet: np.ndarray = attrs.field(init=False)
     num_received_packet: np.ndarray = attrs.field(init=False)
+    num_received_packet_acc: np.ndarray = attrs.field(init=False)
     l_max_estimate: np.ndarray = attrs.field(init=False)
 
     _init_transmit_power: np.ndarray = attrs.field(init=False)
@@ -197,11 +199,17 @@ class WirelessCommunicationCluster:
             shape=(self.num_devices, 2), dtype=int
         )
         self.num_send_packet = self._init_num_send_packet.copy()
+        self.num_sent_packet_acc = (
+            self._init_num_send_packet.copy()
+        )  # Number of sent packet accumulated
 
         self._init_num_received_packet: np.ndarray = np.zeros_like(
             self._init_num_send_packet, dtype=int
         )
-        self.num_received_packet = self._init_num_received_packet
+        self.num_received_packet = self._init_num_received_packet.copy()
+        self.num_received_packet_acc = (
+            self._init_num_received_packet.copy()
+        )  # Number of sent packet accumulated
 
         self._init_transmit_power: np.ndarray = np.full(
             shape=(self.num_devices, 2), fill_value=1.0 / (self.num_devices * 2)
@@ -661,9 +669,9 @@ class WirelessCommunicationCluster:
         None
         """
         self.update_instant_rate(interference)
-        l_max = np.floor(np.multiply(self.instant_rate, self.T / self.D))
+        l_max = np.floor(np.multiply(self.instant_rate, self.T / self.D)).astype(int)
 
-        self.num_received_packet = np.minimum(self.num_send_packet, l_max)
+        self.num_received_packet = np.minimum(self.num_send_packet, l_max, dtype=int)
 
     def estimate_l_max(self) -> None:
         """
@@ -740,6 +748,10 @@ class WirelessCommunicationCluster:
             + info[f"{prefix}/ Overall/ Average rate/ mmWave"]
         )
         info[f"{prefix}/ Overall/ Power usage"] = self.transmit_power.sum()
+        info[f"{prefix}/ Accumulate/ Num. Sent packet"] = self.num_sent_packet_acc
+        info[f"{prefix}/ Accumulate/ Num. Received packet"] = (
+            self.num_received_packet_acc
+        )
 
         for k in range(self.num_devices):
             info[f"{prefix}/ Device {k+1}/ Num. Sent packet/ Sub6GHz"] = (
@@ -756,10 +768,10 @@ class WirelessCommunicationCluster:
                 self.num_received_packet[k, 1]
             )
 
-            info[f"{prefix}/ Device {k+1}/ Num. Droped packet/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k+1}/ Num. Dropped packet/ Sub6GHz"] = (
                 self.num_send_packet[k, 0] - self.num_received_packet[k, 0]
             )
-            info[f"{prefix}/ Device {k+1}/ Num. Droped packet/ mmWave"] = (
+            info[f"{prefix}/ Device {k+1}/ Num. Dropped packet/ mmWave"] = (
                 self.num_send_packet[k, 1] - self.num_received_packet[k, 1]
             )
 
@@ -794,13 +806,17 @@ class WirelessCommunicationCluster:
 
     def step(self):
         self.current_step += 1
+        self.num_sent_packet_acc += self.num_send_packet
+        self.num_received_packet_acc += self.num_received_packet
 
     def reset(self):
         self.current_step = 1
         self.average_rate = self._init_rate.copy()
         self.instant_rate = self._init_rate.copy()
         self.num_send_packet = self._init_num_send_packet
-        self.num_send_packet = self._init_num_received_packet
+        self.num_sent_packet_acc = self._init_num_send_packet
+        self.num_received_packet = self._init_num_received_packet
+        self.num_received_packet_acc = self._init_num_received_packet
         self.transmit_power = self._init_transmit_power
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
         self.global_packet_loss_rate = np.zeros(shape=(self.num_devices))

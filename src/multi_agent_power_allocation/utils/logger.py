@@ -2,6 +2,10 @@ import argparse
 import os
 from typing import Callable, Optional, Tuple
 
+import numpy as np
+
+import plotly.graph_objects as go
+
 from tianshou.utils import BaseLogger
 from tianshou.utils.logger.base import LOG_DATA_TYPE
 
@@ -76,6 +80,20 @@ class Logger(BaseLogger):
         self.wandb_run._label(repo="PowerAllocationMARL")  # type: ignore
 
     def write(self, step_type: str, step: int, data: LOG_DATA_TYPE) -> None:
+        prefix = next(iter(data.keys())).split("/")[0]
+
+        if not (data.get(f"{prefix}/ Accumulate/ Num. Sent packet") is None):
+            num_sent_packet_acc = data.pop(f"{prefix}/ Accumulate/ Num. Sent packet")
+            num_received_packet_acc = data.pop(
+                f"{prefix}/ Accumulate/ Num. Received packet"
+            )
+            fig = self.plot_interface_usage(
+                num_sent_packet_acc,
+                num_received_packet_acc,
+            )
+
+            data.update({f"{prefix}/ Overall/ Interface Usage": fig})
+
         self.wandb_run.log(data, step=step)
 
     def save_data(
@@ -133,3 +151,82 @@ class Logger(BaseLogger):
         except KeyError:
             env_step = 0
         return epoch, env_step, gradient_step
+
+    def plot_interface_usage(
+        self,
+        num_sent_packet: np.ndarray,
+        num_received_packet: np.ndarray,
+        title: str = None,
+    ):
+        """
+        Plot the interface usage as a Plotly stacked bar chart.
+        Args:
+            num_sent_packet (np.ndarray): Array of sent packets [num_devices, 2].
+            num_received_packet (np.ndarray): Array of received packets [num_devices, 2].
+            title (str, optional): Title of the plot.
+        Returns:
+            plotly.graph_objects.Figure
+        """
+        num_dropped_packet = num_sent_packet - num_received_packet
+        num_devices = num_sent_packet.shape[0]
+        x = [f"D{k+1}" for k in range(num_devices)]
+
+        fig = go.Figure()
+
+        # Sub-6GHz bars
+        fig.add_trace(
+            go.Bar(
+                name="Successfully received on Sub-6GHz",
+                x=x,
+                y=num_received_packet[:, 0],
+                marker_color="blue",
+                offsetgroup="Sub-6GHz",
+            )
+        )
+        fig.add_trace(
+            go.Bar(
+                name="Dropped packet on Sub-6GHz",
+                x=x,
+                y=num_dropped_packet[:, 0],
+                marker_color="red",
+                offsetgroup="Sub-6GHz",
+                base=num_received_packet[:, 0],
+            )
+        )
+
+        # mmWave bars
+        fig.add_trace(
+            go.Bar(
+                name="Successfully received on mmWave",
+                x=x,
+                y=num_received_packet[:, 1],
+                marker_color="green",
+                offsetgroup="mmWave",
+            )
+        )
+        fig.add_trace(
+            go.Bar(
+                name="Dropped packet (mmWave)",
+                x=x,
+                y=num_dropped_packet[:, 1],
+                marker_color="red",
+                offsetgroup="mmWave",
+                base=num_received_packet[:, 1],
+            )
+        )
+
+        # Layout
+        fig.update_layout(
+            barmode="relative",
+            xaxis_title="Device",
+            yaxis_title="Number of packets",
+            title=title or "Interface Usage",
+            bargap=0.3,  # spacing between groups
+            legend=dict(
+                orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5
+            ),
+            height=600,
+            width=1000,
+        )
+
+        return fig
