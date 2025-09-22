@@ -6,8 +6,8 @@ import os
 from typing import Dict, Literal, Tuple, List
 import pickle
 from copy import deepcopy
-import yaml
 import json
+import yaml
 import attrs
 
 from tianshou.data import VectorReplayBuffer
@@ -185,7 +185,7 @@ class Trainer:
 
         policies = []
         schedulers = []
-        for _ in range(self.num_agent):
+        for agent_id, agent in enumerate(env.agents):
             actor = SACPAACtor(**self.model_config).to(self.device)
             actor_optim = Adam(actor.parameters(), lr=self.SAC_config["lr"])
             critic1 = SACPACritic(**self.model_config).to(self.device)
@@ -194,7 +194,7 @@ class Trainer:
             critic2_optim = Adam(critic2.parameters(), lr=self.SAC_config["lr"])
 
             # auto entropy tuning setup
-            target_entropy = float(-np.prod(env.action_space.shape))
+            target_entropy = float(-np.prod(env.env.action_space(agent).shape))
             log_alpha = (
                 torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
             )

@@ -5,9 +5,10 @@ This module defines the base class for wireless communication cluster, each clus
 
 import os
 from typing import Dict, Union
-import attrs
 import random
 import json
+import attrs
+import pickle
 
 import numpy as np
 
@@ -296,7 +297,7 @@ class WirelessCommunicationCluster:
             }
         )
 
-        if num_cluster >= 2:
+        if num_cluster > 2:
             raise NotImplementedError("Supported upto 2 APs only!")
 
         for i in range(num_cluster):
@@ -334,25 +335,37 @@ class WirelessCommunicationCluster:
         num_beam: int,
         mu: float,
         sigma: float,
+        seed: int,
     ):
         """
         Generate channel power gain for all IoT devices and subchannel/beam pair
+        Array of generated complex channel coefficients with shape (num_AP, num_timestep, 2, num_device, num_subchannel + num_beam).
         """
         for i in range(num_cluster):
             save_path = os.path.join(
                 BASE_DIR, "data", scenario_name, f"cluster_{i}", "h_tilde.pickle"
             )
 
-            generate_h_tilde(
-                num_timestep + 1,
-                num_device,
-                num_subchannel,
-                num_beam,
-                mu,
-                sigma,
-                True,
-                save_path,
-            )
+            h = []
+            for j in range(num_cluster):
+                np.random.seed(seed * i + j)
+                random.seed(seed * i + j)
+
+                h_ij = generate_h_tilde(
+                    num_timestep + 1,
+                    num_device,
+                    num_subchannel,
+                    num_beam,
+                    mu,
+                    sigma,
+                )
+
+                h.append(h_ij)
+
+            h = np.array(h)
+
+            with open(save_path, "wb") as file:
+                pickle.dump(h, file)
 
     @classmethod
     def generate_data(
@@ -367,8 +380,6 @@ class WirelessCommunicationCluster:
         sigma: float = 1,
         seed: int = 1,
     ):
-        np.random.seed(seed)
-        random.seed(seed)
         for i in range(num_cluster):
             os.makedirs(
                 os.path.join(BASE_DIR, "data", scenario_name, f"cluster_{i}"),
@@ -384,6 +395,7 @@ class WirelessCommunicationCluster:
             num_beam,
             mu,
             sigma,
+            seed,
         )
         cls.generate_postitions(scenario_name, num_cluster, num_device)
 
@@ -491,7 +503,9 @@ class WirelessCommunicationCluster:
             if sub_channel_index != -1:
                 _channel_power[k, 0] = compute_h_sub(
                     distance_to_AP=self.distance_to_AP[k],
-                    h_tilde=self.h_tilde[self.current_step, 0, k, sub_channel_index],
+                    h_tilde=self.h_tilde[
+                        self.cluster_id, self.current_step, 0, k, sub_channel_index
+                    ],
                 )
 
                 _signal_power[0, sub_channel_index] = signal_power(
@@ -515,7 +529,6 @@ class WirelessCommunicationCluster:
                 )
 
         self.signal_power = _signal_power
-        self.estimated_channel_power = _channel_power
 
         if init:
             return _signal_power

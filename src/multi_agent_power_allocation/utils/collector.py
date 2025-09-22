@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 import numpy as np
 import torch
 
-from tianshou.data.collector import Collector
+from tianshou.data.collector import Collector as TianshouCollector
 from tianshou.data import (
     Batch,
     to_numpy,
@@ -14,7 +14,7 @@ from tianshou.data import (
 from multi_agent_power_allocation.utils.logger import Logger
 
 
-class Collector(Collector):
+class Collector(TianshouCollector):
     """
     Collector that returns environment information from env.step()
     """

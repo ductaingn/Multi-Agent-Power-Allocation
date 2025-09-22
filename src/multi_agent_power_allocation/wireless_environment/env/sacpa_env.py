@@ -359,6 +359,15 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         return np.array(states)
 
+    def get_feedbacks(self):
+        """
+        Compute number of received packet at devices side across all wireless communication cluster.
+        This function updates the feedback and average rate for each cluster.
+        """
+        for agent in self.agents:
+            self._update_feedback(agent)
+            self.wc_clusters[agent].estimate_CGINR()
+
     def step(self, actions):
         observations = {}
         terminations = {agent: False for agent in self.agents}

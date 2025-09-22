@@ -15,6 +15,7 @@ from pygame import Surface
 
 from multi_agent_power_allocation.wireless_environment.wireless_communication_cluster import (
     WirelessCommunicationCluster,
+    compute_h_sub,
 )
 from multi_agent_power_allocation.wireless_environment.constants import MAP_SIZE
 
@@ -122,13 +123,50 @@ class WirelessEnvironmentBase(ParallelEnv):
 
         for other_agent in self.agents:
             other_agent: str
+
             if other_agent != agent:
-                interference += self.wc_clusters[other_agent].signal_power
+                other_wcc = self.wc_clusters[other_agent]
+                other_wcc_id = other_wcc.cluster_id
+
+                for other_device, allocation in enumerate(other_wcc.allocation):
+                    subchannel, _ = allocation
+
+                    if subchannel != -1:
+                        device_indice = np.where(
+                            wc_cluster.allocation[:, 0] == subchannel
+                        )  # find which device of wc_cluster use this sub channel
+                        if device_indice[0].size > 0:  # found
+                            assert (
+                                device_indice[0].size <= 1
+                            ), f"There are more than one device using sub-channel {subchannel}! Devices: {device_indice}."
+                            device = device_indice[0][0]
+
+                            interference_h = compute_h_sub(
+                                distance_to_AP=np.linalg.norm(
+                                    wc_cluster.device_positions[device]
+                                    - other_wcc.AP_position
+                                ),
+                                h_tilde=wc_cluster.h_tilde[
+                                    other_wcc_id,
+                                    self.current_step,
+                                    0,
+                                    device,
+                                    subchannel,
+                                ],
+                            )
+
+                            interference_transmit_power = (
+                                other_wcc.transmit_power[other_device, 0]
+                                * other_wcc.P_sum
+                            )
+
+                            interference[0, subchannel] += (
+                                interference_h * interference_transmit_power
+                            )
 
         wc_cluster.update_feedback(interference=interference)
         wc_cluster.update_packet_loss_rate()
         wc_cluster.update_average_rate()
-        wc_cluster.estimate_channel_power()
 
     def get_feedbacks(self):
         """

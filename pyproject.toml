@@ -22,5 +22,8 @@ dependencies = [
   "pettingzoo"
 ]
 
+[project.scripts]
+train_pamarl = "multi_agent_power_allocation.run.train:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]

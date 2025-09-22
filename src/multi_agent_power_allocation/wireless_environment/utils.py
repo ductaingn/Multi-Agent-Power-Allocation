@@ -160,8 +160,7 @@ def generate_h_tilde(
     num_beam: int,
     mu: float,
     sigma: float,
-    save: bool,
-    save_path: str,
+    save_path: str = None,
 ) -> np.ndarray:
     """
     Generate complex channel coefficients for multiple devices, subchannels, and beams over a specified number of timesteps.
@@ -180,10 +179,8 @@ def generate_h_tilde(
         Mean of the normal distribution for generating channel coefficients (default is 0).
     sigma : float, optional
         Standard deviation of the normal distribution for generating channel coefficients (default is 1).
-    save : bool, optional
-        Whether to save the generated channel coefficients to a file (default is True).
     save_path : str, optional
-        Path to save the generated channel coefficients if `save` is True (default is 'environment/scenario_1/h_tilde.pickle').
+        Path to save the generated channel coefficients if provided.
 
     Returns
     -------
@@ -210,7 +207,7 @@ def generate_h_tilde(
         h_tilde, (3, 1, 0, 2)
     )  # [timestep, interface, device index, channel_index] (3, 1, 0, 2)
 
-    if save:
+    if save_path:
         with open(save_path, "wb") as file:
             pickle.dump(h_tilde, file)
 
@@ -353,6 +350,10 @@ def on_segment(p, q, r) -> bool:
     return np.all(q >= np.minimum(p, r)) and np.all(q <= np.maximum(p, r))
 
 
+def cross2d(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    return a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
+
+
 def segments_intersect(s1, s2) -> bool:
     """
     Check if two segment intersect
@@ -373,7 +374,7 @@ def segments_intersect(s1, s2) -> bool:
     p3, p4 = s2[0], s2[1]
 
     def direction(a, b, c):
-        return np.cross(c - a, b - a)
+        return cross2d(c - a, b - a)
 
     d1 = direction(p1, p2, p3)
     d2 = direction(p1, p2, p4)
