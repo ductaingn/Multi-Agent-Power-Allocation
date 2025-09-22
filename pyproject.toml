@@ -15,11 +15,16 @@ maintainers = [
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-  "numpy",
-  "torch",
-  "tianshou",
-  "gymnasium",
-  "pettingzoo"
+  "numpy==2.2.5",
+  "torch==2.7.0",
+  "tianshou==0.5.1",
+  "gymnasium==1.0.0",
+  "pettingzoo==1.25.0",
+  "safetensors==0.5.3",
+  "tensorboard==2.20.0",
+  "tensorboardX==2.6.4",
+  "tensorboard-data-server==0.7.2",
+  "wandb==0.19.11"
 ]
 
 [project.scripts]
