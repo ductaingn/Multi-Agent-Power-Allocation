@@ -33,7 +33,7 @@ def main():
 
     result = trainer.train(args.run_name)
 
-    pprint.pprint(result)
+    result.pprint_asdict()
 
 
 if __name__ == "__main__":

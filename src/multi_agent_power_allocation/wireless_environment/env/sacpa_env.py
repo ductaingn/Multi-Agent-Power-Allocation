@@ -1,4 +1,5 @@
 from typing import Dict
+from copy import deepcopy
 import attrs
 
 import torch
@@ -6,7 +7,9 @@ from torch.nn.functional import softmax
 import numpy as np
 import gymnasium as gym
 
-from .base_env import WirelessEnvironmentBase
+from multi_agent_power_allocation.wireless_environment.env import (
+    WirelessEnvironmentBase,
+)
 from multi_agent_power_allocation.wireless_environment.wireless_communication_cluster import (
     WirelessCommunicationCluster,
 )
@@ -135,7 +138,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
             self.wc_clusters[wcc_agent].reset()
 
         observations = self.get_observations()
-        infos = {}
+        infos = self.get_infos()
         return observations, infos
 
     def compute_number_send_packet_and_power(
