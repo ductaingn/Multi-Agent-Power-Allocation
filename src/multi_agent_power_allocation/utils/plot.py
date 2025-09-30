@@ -1,15 +1,3 @@
-# """
-# Plot APs, IoT devices and obstacles positions
-
-# Parameters
-# ----------
-# ax : Axes
-#     The ax the plot in
-# positions : Dict
-#     The positions of APs, IoT devices and obstacles
-# colors : Colormap
-#     The colormap for each cluster
-# """
 import os
 from typing import Dict, List
 
@@ -76,6 +64,18 @@ class ImageHandler(HandlerBase):
 
 
 def plot_positions(ax: Axes, positions: List[Dict], colors: Colormap) -> None:
+    """
+    Plot APs, IoT devices and obstacles positions
+
+    Parameters
+    ----------
+    ax : Axes
+        The ax the plot in
+    positions : Dict
+        The positions of APs, IoT devices and obstacles
+    colors : Colormap
+        The colormap for each cluster
+    """
     ax.set_title("Access Points and IoT Devices Positions")
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -92,8 +92,8 @@ def plot_positions(ax: Axes, positions: List[Dict], colors: Colormap) -> None:
         dev_positions = np.array(cluster["devices"])
         dids = [f"{did + 1}" for did in range(len(dev_positions))]
         obstacle_positions = cluster["obstacles"]
-        ap_img = tint_image(AP_IMG, color=colors(idx))
-        device_img = tint_image(DEVICE_IMG, color=colors(idx))
+        ap_img = tint_image(AP_IMG, color=colors[idx])
+        device_img = tint_image(DEVICE_IMG, color=colors[idx])
 
         # --- Plot AP ---
         ap_imgbox = OffsetImage(ap_img, zoom=0.3)
@@ -164,5 +164,8 @@ if __name__ == "__main__":
     ax = plt.subplot()
     ax.set_aspect("equal", adjustable="box")
 
-    plot_positions(ax, positions, colors=plt.get_cmap("tab10", 2))
+    cmap = plt.get_cmap("tab10")
+    colors = [cmap(i) for i in range(2)]  # first two: blue and orange
+    print(colors)
+    plot_positions(ax, positions, colors=colors)
     plt.show()

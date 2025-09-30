@@ -17,7 +17,7 @@ from multi_agent_power_allocation.wireless_environment.wireless_communication_cl
     WirelessCommunicationCluster,
     compute_h_sub,
 )
-from multi_agent_power_allocation.utils import plot_positions
+from multi_agent_power_allocation.utils.plot import plot_positions
 
 
 @attrs.define
@@ -236,7 +236,8 @@ class WirelessEnvironmentBase(ParallelEnv):
         # === LEFT HALF: Positions ===
         ax_pos = fig.add_subplot(gs[0, 0])
 
-        colors = plt.get_cmap("tab10", self.num_cluster)
+        colormap = plt.get_cmap("tab10")
+        colors = [colormap(i) for i in range(self.num_cluster)]
 
         positions: List[Dict] = []
         for idx, (cid, cluster) in enumerate(self.wc_clusters.items()):
@@ -262,7 +263,7 @@ class WirelessEnvironmentBase(ParallelEnv):
             ax_bar.bar(
                 range(len(packets)),
                 packets,
-                color=colors(idx),
+                color=colors[idx],
                 tick_label=[f"Device {i+1}" for i in range(cluster.num_devices)],
             )
             ax_bar.set_title(f"Cluster {cid} Num. Sent Packets")
@@ -276,7 +277,7 @@ class WirelessEnvironmentBase(ParallelEnv):
                 power_alloc,
                 labels=[f"D{i}" for i in range(len(power_alloc))],
                 autopct="%1.1f%%",
-                colors=[colors(idx)] * len(power_alloc),
+                colors=[colors[idx]] * len(power_alloc),
             )
             ax_pie.set_title(f"Cluster {cid} Power")
 

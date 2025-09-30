@@ -7,8 +7,8 @@ import os
 from typing import Dict, Union
 import random
 import json
-import attrs
 import pickle
+import attrs
 
 import numpy as np
 
