@@ -10,7 +10,8 @@ import json
 import yaml
 import attrs
 
-from tianshou.data import VectorReplayBuffer
+from tianshou.data import VectorReplayBuffer, InfoStats
+from tianshou.data.collector import Collector, CollectStats
 from tianshou.env import DummyVectorEnv
 from tianshou.env.pettingzoo_env import PettingZooEnv
 from tianshou.policy import SACPolicy, MultiAgentPolicyManager
@@ -29,7 +30,6 @@ from multi_agent_power_allocation.wireless_environment.env import (
     WirelessEnvironmentSACPA,
     WirelessEnvironmentRandom,
 )
-from multi_agent_power_allocation.utils.collector import Collector
 from multi_agent_power_allocation.utils.logger import Logger
 
 
@@ -221,20 +221,22 @@ class Trainer:
             ]
 
             policy = SACPolicy(
-                actor,
-                actor_optim,
-                critic1,
-                critic1_optim,
-                critic2,
-                critic2_optim,
+                actor=actor,
+                actor_optim=actor_optim,
+                critic=critic1,
+                critic_optim=critic1_optim,
+                critic2=critic2,
+                critic2_optim=critic2_optim,
                 alpha=(target_entropy, log_alpha, alpha_optim),
+                action_space=env.env.action_space(agent),
+                action_scaling=False,
             )
 
             policies.append(policy)
 
         policy = MultiAgentPolicyManager(
-            policies,
-            env,
+            policies=policies,
+            env=env,
             # lr_scheduler=MultipleLRSchedulers(*schedulers)
         )
 
@@ -254,18 +256,15 @@ class Trainer:
             train_interval=1,
             test_interval=1,
             update_interval=1,
+            info_interval=1,
             project=self.wandb_config["project"],
             config={"algorithm": self.algorithm, "env_config": self.env_config},
             name=run_name,
         )
 
-        for agent_id in range(self.num_agent):
-            logger.wandb_run.watch(
-                policy.policies[agents[agent_id]].actor,
-                log="gradients",
-                log_freq=100,
-                idx=agent_id,
-            )
+        # logger.wandb_run.watch(
+        #     policy.policies[agents[0]].actor, log="all", log_graph=True, log_freq=100
+        # )
 
         def log_params(step):
             logger.wandb_run.log(
@@ -278,13 +277,14 @@ class Trainer:
             )
 
         # ======== collector setup =========
-        train_collector = Collector(
+        train_collector = Collector[CollectStats](
             policy=policy,
             env=train_envs,
             buffer=VectorReplayBuffer(100_000 * self.num_env, buffer_num=self.num_env),
             exploration_noise=True,
         )
-        train_collector.load_logger(logger)
+        train_collector.reset()
+        train_collector.collect(n_step=256)
 
         # ======== callback setup ========
         def save_best_fn(policy):
@@ -314,13 +314,11 @@ class Trainer:
 
         return trainer
 
-    def train(self, run_name: str) -> Dict[str, float | str]:
+    def train(self, run_name: str) -> InfoStats:
         trainer = self.build(run_name)
 
         # torch.autograd.set_detect_anomaly(True)
 
         result = trainer.run()
-
-        trainer.logger.wandb_run.finish(exit_code=0)
 
         return result

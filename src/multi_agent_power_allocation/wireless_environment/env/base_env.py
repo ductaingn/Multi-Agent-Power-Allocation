@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, DefaultDict
 import random
 import attrs
 
@@ -202,7 +202,7 @@ class WirelessEnvironmentBase(ParallelEnv):
         return observations
 
     def get_infos(
-        self, rewards: Dict[int, Dict[str, float]]
+        self, rewards: Dict[int, Dict[str, float]] = DefaultDict()
     ) -> Dict[int, Dict[str, float]]:
         infos = {}
 
@@ -210,7 +210,7 @@ class WirelessEnvironmentBase(ParallelEnv):
             agent: str
 
             wc_cluster = self.wc_clusters[agent]
-            agent_reward = rewards.get(agent)
+            agent_reward = rewards.get(agent, DefaultDict())
             infos.update({agent: wc_cluster.get_info(agent_reward)})
 
         return infos

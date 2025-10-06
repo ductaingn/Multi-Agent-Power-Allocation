@@ -1,34 +1,31 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "multi-agent-power-allocation"
 version = "0.1.0"
 description = "Multi-agent power allocation with DRL"
-authors = [
-  { name = "Nguyen Duc Tai", email = "ductaingn.015203@gmail.com" }
-]
-maintainers = [
-  { name = "Nguyen Duc Tai", email = "ductaingn.015203@gmail.com" }
-]
+authors = ["Nguyen Duc Tai <ductaingn.015203@gmail.com>"]
 readme = "README.md"
-requires-python = ">=3.8"
-dependencies = [
-  "numpy==2.2.5",
-  "torch==2.6.0",
-  "tianshou==0.5.1",
-  "gymnasium==1.0.0",
-  "pettingzoo==1.25.0",
-  "safetensors==0.5.3",
-  "tensorboard==2.20.0",
-  "tensorboardX==2.6.4",
-  "tensorboard-data-server==0.7.2",
-  "wandb==0.19.11"
-]
+packages = [{ include = "multi_agent_power_allocation", from = "src" }]
 
-[project.scripts]
+[tool.poetry.dependencies]
+python = "3.11.13"
+attrs = "25.3.0"
+pygame = "2.6.1"
+plotly = "6.2.0"
+torch = {version = "2.6.0", source = "torch-cpu"}
+numpy = "1.26.4"
+tianshou = "1.2.0"
+wandb = "0.19.11"
+torchvision = {version = "0.21.0", source = "torch-cpu"}
+torchaudio = {version = "2.6.0", source = "torch-cpu"}
+
+[[tool.poetry.source]]
+name = "torch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
+[tool.poetry.scripts]
 train_pamarl = "multi_agent_power_allocation.run.train:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

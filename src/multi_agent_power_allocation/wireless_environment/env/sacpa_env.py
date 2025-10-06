@@ -1,4 +1,5 @@
 from typing import Dict
+from copy import deepcopy
 import attrs
 
 import torch
@@ -151,7 +152,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
             self.wc_clusters[wcc_agent].reset()
 
         observations = self.get_observations()
-        infos = {}
+        infos = self.get_infos()
         return observations, infos
 
     def compute_number_send_packet_and_power(

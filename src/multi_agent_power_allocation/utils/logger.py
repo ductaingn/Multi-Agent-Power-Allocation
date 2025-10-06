@@ -1,15 +1,19 @@
 import argparse
+import contextlib
+import logging
 import os
-from typing import Callable, Optional, Tuple
-
-import numpy as np
-
-import plotly.graph_objects as go
+from collections.abc import Callable
 
 from tianshou.utils import BaseLogger
-from tianshou.utils.logger.base import LOG_DATA_TYPE
+from tianshou.utils.logger.base import VALID_LOG_VALS_TYPE
 
-import wandb
+import numpy as np
+import plotly.graph_objects as go
+
+with contextlib.suppress(ImportError):
+    import wandb
+
+log = logging.getLogger(__name__)
 
 
 class Logger(BaseLogger):
@@ -21,16 +25,17 @@ class Logger(BaseLogger):
     Example of usage:
     ::
 
-        logger = WandbLogger()
+        logger = Logger()
         logger.load(SummaryWriter(log_path))
-        result = onpolicy_trainer(policy, train_collector, test_collector,
-                                  logger=logger)
+        result = OnpolicyTrainer(policy, train_collector, test_collector,
+                                  logger=logger).run()
 
     :param int train_interval: the log interval in log_train_data(). Default to 1000.
     :param int test_interval: the log interval in log_test_data(). Default to 1.
     :param int update_interval: the log interval in log_update_data().
         Default to 1000.
-    :param int save_interval: the save interval in save_data(). Default to 1 (save at
+    :param int info_interval: the log interval in log_info_data(). Default to 1.
+    :param int save_interval: the save interval in save_data(). Default to 1000 (save at
         the end of each epoch).
     :param bool write_flush: whether to flush tensorboard result after each
         add_scalar operation. Default to True.
@@ -46,43 +51,59 @@ class Logger(BaseLogger):
         train_interval: int = 1000,
         test_interval: int = 1,
         update_interval: int = 1000,
+        info_interval: int = 1,
         save_interval: int = 1000,
         write_flush: bool = True,
-        project: Optional[str] = None,
-        name: Optional[str] = None,
-        entity: Optional[str] = None,
-        run_id: Optional[str] = None,
-        config: Optional[argparse.Namespace] = None,
+        project: str | None = None,
+        name: str | None = None,
+        entity: str | None = None,
+        run_id: str | None = None,
+        group: str | None = None,
+        job_type: str | None = None,
+        config: argparse.Namespace | dict | None = None,
         monitor_gym: bool = True,
+        disable_stats: bool = False,
+        log_dir: str | None = None,
     ) -> None:
-        super().__init__(train_interval, test_interval, update_interval)
+        super().__init__(train_interval, test_interval, update_interval, info_interval)
         self.last_save_step = -1
         self.save_interval = save_interval
         self.write_flush = write_flush
         self.restored = False
         if project is None:
-            project = os.getenv("WANDB_PROJECT", "PowerAllocationMARL")
+            project = os.getenv("WANDB_PROJECT", "tianshou")
 
         self.wandb_run = (
             wandb.init(
                 project=project,
+                group=group,
+                job_type=job_type,
                 name=name,
                 id=run_id,
                 resume="allow",
                 entity=entity,
-                monitor_gym=monitor_gym,
-                config=config,  # type: ignore,
+                # monitor_gym=monitor_gym,  # currently disabled until gymnasium version is bumped to >1.0.0 https://github.com/wandb/wandb/issues/7047
+                dir=log_dir,
+                config=config,  # type: ignore
+                settings=wandb.Settings(_disable_stats=disable_stats),
             )
             if not wandb.run
             else wandb.run
         )
 
-    def write(self, step_type: str, step: int, data: LOG_DATA_TYPE) -> None:
-        prefix = next(iter(data.keys())).split("/")[0]
+    def write(
+        self, step_type: str, step: int, data: dict[str, VALID_LOG_VALS_TYPE]
+    ) -> None:
+        pass
 
-        if not (data.get(f"{prefix}/ Accumulate/ Num. Sent packet") is None):
-            num_sent_packet_acc = data.pop(f"{prefix}/ Accumulate/ Num. Sent packet")
-            num_received_packet_acc = data.pop(
+    def prepare_dict_for_logging(self, log_data):
+        prefix = next(iter(log_data.keys())).split("/")[0]
+
+        if not (log_data.get(f"{prefix}/ Accumulate/ Num. Sent packet") is None):
+            num_sent_packet_acc = log_data.pop(
+                f"{prefix}/ Accumulate/ Num. Sent packet"
+            )
+            num_received_packet_acc = log_data.pop(
                 f"{prefix}/ Accumulate/ Num. Received packet"
             )
             fig = self.plot_interface_usage(
@@ -90,22 +111,26 @@ class Logger(BaseLogger):
                 num_received_packet_acc,
             )
 
-            data.update({f"{prefix}/ Overall/ Interface Usage": fig})
+            log_data.update({f"{prefix}/ Overall/ Interface Usage": fig})
 
-        self.wandb_run.log(data, step=step)
+        return log_data
+
+    def finalize(self) -> None:
+        if self.wandb_run is not None:
+            self.wandb_run.finish()
 
     def save_data(
         self,
         epoch: int,
         env_step: int,
         gradient_step: int,
-        save_checkpoint_fn: Optional[Callable[[int, int, int], str]] = None,
+        save_checkpoint_fn: Callable[[int, int, int], str] | None = None,
     ) -> None:
         """Use writer to log metadata when calling ``save_checkpoint_fn`` in trainer.
 
-        :param int epoch: the epoch in trainer.
-        :param int env_step: the env_step in trainer.
-        :param int gradient_step: the gradient_step in trainer.
+        :param epoch: the epoch in trainer.
+        :param env_step: the env_step in trainer.
+        :param gradient_step: the gradient_step in trainer.
         :param function save_checkpoint_fn: a hook defined by user, see trainer
             documentation for detail.
         """
@@ -126,14 +151,14 @@ class Logger(BaseLogger):
             checkpoint_artifact.add_file(str(checkpoint_path))
             self.wandb_run.log_artifact(checkpoint_artifact)  # type: ignore
 
-    def restore_data(self) -> Tuple[int, int, int]:
+    def restore_data(self) -> tuple[int, int, int]:
         checkpoint_artifact = self.wandb_run.use_artifact(  # type: ignore
-            f"run_{self.wandb_run.id}_checkpoint:latest"  # type: ignore
+            f"run_{self.wandb_run.id}_checkpoint:latest",  # type: ignore
         )
         assert checkpoint_artifact is not None, "W&B dataset artifact doesn't exist"
 
         checkpoint_artifact.download(
-            os.path.dirname(checkpoint_artifact.metadata["checkpoint_path"])
+            os.path.dirname(checkpoint_artifact.metadata["checkpoint_path"]),
         )
 
         try:  # epoch / gradient_step
@@ -149,6 +174,10 @@ class Logger(BaseLogger):
         except KeyError:
             env_step = 0
         return epoch, env_step, gradient_step
+
+    @staticmethod
+    def restore_logged_data(log_path: str):
+        pass
 
     def plot_interface_usage(
         self,

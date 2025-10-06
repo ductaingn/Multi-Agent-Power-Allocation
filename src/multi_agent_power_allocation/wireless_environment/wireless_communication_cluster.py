@@ -752,9 +752,9 @@ class WirelessCommunicationCluster:
         info = {}
         prefix = f"Agent {self.cluster_id}"
 
-        info[f"{prefix}/ Overall/ Reward"] = reward.get("instant_reward")
-        info[f"{prefix}/ Overall/ Reward QoS"] = reward.get("reward_qos")
-        info[f"{prefix}/ Overall/ Reward Power"] = reward.get("reward_power")
+        info[f"{prefix}/ Overall/ Reward"] = reward.get("instant_reward", 0.0)
+        info[f"{prefix}/ Overall/ Reward QoS"] = reward.get("reward_qos", 0.0)
+        info[f"{prefix}/ Overall/ Reward Power"] = reward.get("reward_power", 0.0)
         info[f"{prefix}/ Overall/ Sum Packet loss rate"] = self.sum_packet_loss_rate
         info[f"{prefix}/ Overall/ Average rate/ Sub6GHz"] = self.average_rate[
             :, 0
