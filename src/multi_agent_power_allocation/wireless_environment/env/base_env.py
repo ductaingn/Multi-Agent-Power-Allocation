@@ -146,8 +146,8 @@ class WirelessEnvironmentBase(ParallelEnv):
                                     wc_cluster.device_positions[device]
                                     - other_wcc.AP_position
                                 ),
-                                h_tilde=wc_cluster.h_tilde[
-                                    other_wcc_id,
+                                h_tilde=other_wcc.h_tilde[
+                                    wc_cluster.cluster_id,
                                     self.current_step,
                                     0,
                                     device,

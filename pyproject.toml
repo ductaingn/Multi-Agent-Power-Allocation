@@ -16,7 +16,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
   "numpy==2.2.5",
-  "torch==2.7.0",
+  "torch==2.6.0",
   "tianshou==0.5.1",
   "gymnasium==1.0.0",
   "pettingzoo==1.25.0",

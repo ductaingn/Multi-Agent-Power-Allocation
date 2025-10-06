@@ -149,23 +149,29 @@ if __name__ == "__main__":
 
     positions = []
     with open(
-        "/home/nguyen/Projects/MultiAgentPowerAllocation/multi-agent-power-allocation/src/multi_agent_power_allocation/data/scenario_1/cluster_0/positions.json",
+        "/home/nguyen/Projects/MultiAgentPowerAllocation/multi-agent-power-allocation/src/multi_agent_power_allocation/data/scenario_2/cluster_0/positions.json",
         "rt",
     ) as file:
         positions.append(json.load(file))
         positions[0].update({"ID": 0})
     with open(
-        "/home/nguyen/Projects/MultiAgentPowerAllocation/multi-agent-power-allocation/src/multi_agent_power_allocation/data/scenario_1/cluster_1/positions.json",
+        "/home/nguyen/Projects/MultiAgentPowerAllocation/multi-agent-power-allocation/src/multi_agent_power_allocation/data/scenario_2/cluster_1/positions.json",
         "rt",
     ) as file:
         positions.append(json.load(file))
         positions[1].update({"ID": 1})
+    with open(
+        "/home/nguyen/Projects/MultiAgentPowerAllocation/multi-agent-power-allocation/src/multi_agent_power_allocation/data/scenario_2/cluster_2/positions.json",
+        "rt",
+    ) as file:
+        positions.append(json.load(file))
+        positions[2].update({"ID": 2})
 
     ax = plt.subplot()
     ax.set_aspect("equal", adjustable="box")
 
     cmap = plt.get_cmap("tab10")
-    colors = [cmap(i) for i in range(2)]  # first two: blue and orange
+    colors = [cmap(i) for i in range(len(positions))]  # first two: blue and orange
     print(colors)
     plot_positions(ax, positions, colors=colors)
     plt.show()

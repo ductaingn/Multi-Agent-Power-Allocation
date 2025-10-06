@@ -15,6 +15,7 @@ from tianshou.env import DummyVectorEnv
 from tianshou.env.pettingzoo_env import PettingZooEnv
 from tianshou.policy import SACPolicy, MultiAgentPolicyManager
 from tianshou.trainer import OffpolicyTrainer, BaseTrainer
+from tianshou.utils.lr_scheduler import MultipleLRSchedulers
 
 from pettingzoo.utils.conversions import parallel_to_aec
 import torch
@@ -77,10 +78,10 @@ def parse_config(path: str) -> Dict:
         )
 
         if not os.path.isfile(h_tilde_path):
-            raise FileNotFoundError("`h_tilde` path is not valid!")
+            raise FileNotFoundError(f"`h_tilde` path is not valid!: {h_tilde_path}")
 
         if not os.path.isfile(positions_path):
-            raise FileNotFoundError("`positions` path is not valid!")
+            raise FileNotFoundError(f"`positions` path is not valid!: {positions_path}")
 
         positions: Dict = json.load(open(positions_path, "rt", encoding="utf-8"))
         parsed_wc_clusters_configs.append(
@@ -158,9 +159,6 @@ class Trainer:
             if key not in value:
                 raise ValueError(f"model_config must contain {key}!")
 
-        value.update({"observation_space": self.get_env().observation_space})
-        value.update({"action_space": self.get_env().action_space})
-
     def __attrs_post_init__(self):
         self.env = f"WirelessEnvironment{self.algorithm}-v2"
         self.max_num_step = self.env_config["max_num_step"]
@@ -186,15 +184,30 @@ class Trainer:
         policies = []
         schedulers = []
         for agent_id, agent in enumerate(env.agents):
-            actor = SACPAACtor(**self.model_config).to(self.device)
+            obs_space = env.env.observation_space(agent)
+            action_space = env.env.action_space(agent)
+
+            actor = SACPAACtor(
+                observation_space=obs_space,
+                action_space=action_space,
+                **self.model_config,
+            ).to(self.device)
             actor_optim = Adam(actor.parameters(), lr=self.SAC_config["lr"])
-            critic1 = SACPACritic(**self.model_config).to(self.device)
+            critic1 = SACPACritic(
+                observation_space=obs_space,
+                action_space=action_space,
+                **self.model_config,
+            ).to(self.device)
             critic1_optim = Adam(critic1.parameters(), lr=self.SAC_config["lr"])
-            critic2 = SACPACritic(**self.model_config).to(self.device)
+            critic2 = SACPACritic(
+                observation_space=obs_space,
+                action_space=action_space,
+                **self.model_config,
+            ).to(self.device)
             critic2_optim = Adam(critic2.parameters(), lr=self.SAC_config["lr"])
 
             # auto entropy tuning setup
-            target_entropy = float(-np.prod(env.env.action_space(agent).shape))
+            target_entropy = float(-np.prod(action_space.shape))
             log_alpha = (
                 torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
             )
@@ -246,9 +259,13 @@ class Trainer:
             name=run_name,
         )
 
-        logger.wandb_run.watch(
-            policy.policies[agents[0]].actor, log="all", log_graph=True, log_freq=100
-        )
+        for agent_id in range(self.num_agent):
+            logger.wandb_run.watch(
+                policy.policies[agents[agent_id]].actor,
+                log="gradients",
+                log_freq=100,
+                idx=agent_id,
+            )
 
         def log_params(step):
             logger.wandb_run.log(
@@ -299,6 +316,8 @@ class Trainer:
 
     def train(self, run_name: str) -> Dict[str, float | str]:
         trainer = self.build(run_name)
+
+        # torch.autograd.set_detect_anomaly(True)
 
         result = trainer.run()
 

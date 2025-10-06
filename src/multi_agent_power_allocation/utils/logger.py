@@ -72,12 +72,10 @@ class Logger(BaseLogger):
                 entity=entity,
                 monitor_gym=monitor_gym,
                 config=config,  # type: ignore,
-                settings=wandb.Settings(code_dir=None),
             )
             if not wandb.run
             else wandb.run
         )
-        self.wandb_run._label(repo="PowerAllocationMARL")  # type: ignore
 
     def write(self, step_type: str, step: int, data: LOG_DATA_TYPE) -> None:
         prefix = next(iter(data.keys())).split("/")[0]

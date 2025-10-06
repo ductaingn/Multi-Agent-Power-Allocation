@@ -296,9 +296,16 @@ class WirelessCommunicationCluster:
                 "obstacles": [[[-90.0, -90.0], [-110.0, -90.0]]],
             }
         )
+        clusters.append(
+            {
+                "AP": [-100.0, 100.0],
+                "devices": [[-80.0, 100.0], [-100.0, 120.0], [-185.0, 20.0]],
+                "obstacles": [[[-90.0, 110.0], [-110.0, 110.0]]],
+            }
+        )
 
-        if num_cluster > 2:
-            raise NotImplementedError("Supported upto 2 APs only!")
+        if num_cluster > 3:
+            raise NotImplementedError("Supported upto 3 APs only!")
 
         for i in range(num_cluster):
 
@@ -736,8 +743,7 @@ class WirelessCommunicationCluster:
                 self.estimated_CGINR[k, 1] = (
                     2
                     ** (
-                        (self.num_received_packet[k, 1] * self.D)
-                        / (self.W_sub * self.T)
+                        (self.num_received_packet[k, 1] * self.D) / (self.W_mw * self.T)
                     )
                     - 1
                 ) / (self.transmit_power[k, 1] * self.P_sum)
