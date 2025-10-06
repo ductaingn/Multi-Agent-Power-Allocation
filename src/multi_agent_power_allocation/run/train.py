@@ -20,7 +20,7 @@ def main():
         "-rn",
         "--run_name",
         type=str,
-        default="train",
+        default="debugging",
         required=False,
         help="Name of the run (for logging purpose)",
     )

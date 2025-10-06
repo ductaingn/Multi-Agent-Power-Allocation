@@ -17,7 +17,7 @@ from multi_agent_power_allocation.wireless_environment.wireless_communication_cl
     WirelessCommunicationCluster,
     compute_h_sub,
 )
-from multi_agent_power_allocation.wireless_environment.constants import MAP_SIZE
+from multi_agent_power_allocation.utils.plot import plot_positions
 
 
 @attrs.define
@@ -146,8 +146,8 @@ class WirelessEnvironmentBase(ParallelEnv):
                                     wc_cluster.device_positions[device]
                                     - other_wcc.AP_position
                                 ),
-                                h_tilde=wc_cluster.h_tilde[
-                                    other_wcc_id,
+                                h_tilde=other_wcc.h_tilde[
+                                    wc_cluster.cluster_id,
                                     self.current_step,
                                     0,
                                     device,
@@ -235,47 +235,21 @@ class WirelessEnvironmentBase(ParallelEnv):
 
         # === LEFT HALF: Positions ===
         ax_pos = fig.add_subplot(gs[0, 0])
-        ax_pos.set_title("Access Points and IoT Devices")
-        ax_pos.set_xlabel("X")
-        ax_pos.set_ylabel("Y")
-        ax_pos.set_xlim(-MAP_SIZE[0] / 2, MAP_SIZE[0] / 2)
-        ax_pos.set_ylim(-MAP_SIZE[1] / 2, MAP_SIZE[1] / 2)
 
-        # Plot each cluster
-        colors = plt.get_cmap("tab10", self.num_cluster)
+        colormap = plt.get_cmap("tab10")
+        colors = [colormap(i) for i in range(self.num_cluster)]
+
+        positions: List[Dict] = []
         for idx, (cid, cluster) in enumerate(self.wc_clusters.items()):
-            ap_x, ap_y = cluster.AP_position
-            dev_positions = np.array(cluster.device_positions)
-
-            # Plot AP
-            ax_pos.scatter(
-                ap_x, ap_y, c=[colors(idx)], marker="^", s=200, label=f"AP {cid}"
+            positions.append(
+                {
+                    "ID": cluster.cluster_id,
+                    "AP": cluster.AP_position,
+                    "devices": cluster.device_positions,
+                    "obstacles": cluster.obstacle_positions,
+                }
             )
-
-            # Plot devices
-            ax_pos.scatter(
-                dev_positions[:, 0],
-                dev_positions[:, 1],
-                c=[colors(idx)],
-                marker="o",
-                alpha=0.7,
-                label=f"Cluster {cid} Devices",
-            )
-
-            # Plot obstacles
-            for pos in cluster.obstacle_positions:
-                start_point, end_point = pos
-
-                # Extract x and y coordinates
-                x_coords = [start_point[0], end_point[0]]
-                y_coords = [start_point[1], end_point[1]]
-
-                # Plot the line segment
-                ax_pos.plot(x_coords, y_coords, "k-", linewidth=4)
-
-        ax_pos.plot([], [], "k-", linewidth=2, label="Obstacles")
-        ax_pos.legend(loc="upper left")
-        ax_pos.grid(True, linestyle="--", alpha=0.5)
+        plot_positions(ax_pos, positions, colors)
 
         # === RIGHT HALF: Stats per cluster ===
         outer_gs = gs[0, 1].subgridspec(self.num_cluster, 1)  # vertical split
@@ -289,7 +263,7 @@ class WirelessEnvironmentBase(ParallelEnv):
             ax_bar.bar(
                 range(len(packets)),
                 packets,
-                color=colors(idx),
+                color=colors[idx],
                 tick_label=[f"Device {i+1}" for i in range(cluster.num_devices)],
             )
             ax_bar.set_title(f"Cluster {cid} Num. Sent Packets")
@@ -303,7 +277,7 @@ class WirelessEnvironmentBase(ParallelEnv):
                 power_alloc,
                 labels=[f"D{i}" for i in range(len(power_alloc))],
                 autopct="%1.1f%%",
-                colors=[colors(idx)] * len(power_alloc),
+                colors=[colors[idx]] * len(power_alloc),
             )
             ax_pie.set_title(f"Cluster {cid} Power")
 

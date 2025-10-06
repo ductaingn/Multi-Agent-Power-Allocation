@@ -61,6 +61,13 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
                     np.zeros(
                         shape=(num_devices)
                     ),  # Power of each device on mmWave on previous time step
+                    # To-do: test with this state space
+                    # np.zeros(
+                    #     shape=(num_devices)
+                    # ),  # Estimated ideal power of each device on Sub6GHz on previous time step
+                    # np.zeros(
+                    #     shape=(num_devices)
+                    # ),  # Estimated ideal power of each device on mmWave on previous time step
                 ],
                 dtype=np.float32,
             )
@@ -91,7 +98,14 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
                     ),  # Power of each device on Sub6GHz of previous time step
                     np.ones(
                         shape=(num_devices)
-                    ),  # Power of each device on mmWave of previous time step,
+                    ),  # Power of each device on mmWave of previous time step
+                    # To-do: Test with this state space
+                    # np.ones(
+                    #     shape=(num_devices)
+                    # ),  # Estimated ideal power of each device on Sub6GHz of previous time step
+                    # np.ones(
+                    #     shape=(num_devices)
+                    # ),  # Estimated ideal power of each device on mmWave of previous time step
                 ],
                 dtype=np.float32,
             )
@@ -246,7 +260,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         def estimate_ideal_power(num_send_packet, CGINR, W):
             if CGINR == 0:
-                return wc_cluster.P_sum
+                return 1.0
 
             ideal_power = (
                 2 ** ((num_send_packet * wc_cluster.D) / (W * wc_cluster.T)) - 1
@@ -314,9 +328,8 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         target_power = softmax(target_power, dim=-1)
         predicted_power = torch.tensor(predicted_power)
 
-        reward_power = (
-            -wc_cluster.num_devices
-            * (target_power * (target_power.log() - predicted_power.log())).sum()
+        reward_power = -wc_cluster.num_devices * np.tanh(
+            (target_power * (target_power.log() - predicted_power.log())).sum().item()
         )
         reward_qos = (
             (self.current_step - 1) * self.reward_qos(agent) + reward_qos
@@ -338,7 +351,13 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         """ """
         wc_cluster = self.wc_clusters[agent]
 
-        _state = np.zeros(shape=(wc_cluster.num_devices, 8))
+        _state = np.zeros(
+            shape=(
+                wc_cluster.num_devices,
+                self.observation_space(agent).shape[-1]
+                // self.wc_clusters[agent].num_devices,
+            )
+        )
         # QoS satisfaction
         _state[:, 0] = (
             wc_cluster.packet_loss_rate[:, 0] <= wc_cluster.qos_threshold
@@ -352,6 +371,9 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
         _state[:, 5] = wc_cluster.average_rate[:, 1] / wc_cluster.maximum_rate[1]
         _state[:, 6] = wc_cluster.transmit_power[:, 0].copy() * 10.0  # Scale up
         _state[:, 7] = wc_cluster.transmit_power[:, 1].copy() * 10.0
+        # To-do: Test with this state space
+        # _state[:, 8] = wc_cluster.estimated_ideal_power[:, 0].copy() * 10.0
+        # _state[:, 9] = wc_cluster.estimated_ideal_power[:, 1].copy() * 10.0
 
         return _state
 
@@ -362,13 +384,8 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         return np.array(states)
 
-    def get_feedbacks(self):
-        """
-        Compute number of received packet at devices side across all wireless communication cluster.
-        This function updates the feedback and average rate for each cluster.
-        """
+    def estimate_CGINR(self):
         for agent in self.agents:
-            self._update_feedback(agent)
             self.wc_clusters[agent].estimate_CGINR()
 
     def step(self, actions):
@@ -379,14 +396,14 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
 
         self.compute_actions(policy_network_outputs=actions)
         self.get_feedbacks()
+        self.estimate_CGINR()
 
         for wc_cluster in self.wc_clusters:
             self.wc_clusters[wc_cluster].step()
 
         _rewards = self.get_rewards()
         rewards = {
-            agent: _rewards.get(agent).get("instant_reward")
-            for agent in _rewards.keys()
+            agent: _rewards.get(agent).get("instant_reward") for agent in _rewards
         }
 
         observations = self.get_observations()

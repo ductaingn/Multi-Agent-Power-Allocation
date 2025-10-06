@@ -90,7 +90,6 @@ class Logger(BaseLogger):
             if not wandb.run
             else wandb.run
         )
-        self.wandb_run._label(repo="PowerAllocationMARL")  # type: ignore
 
     def write(
         self, step_type: str, step: int, data: dict[str, VALID_LOG_VALS_TYPE]
