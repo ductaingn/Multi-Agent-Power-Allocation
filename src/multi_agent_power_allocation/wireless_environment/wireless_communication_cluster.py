@@ -173,6 +173,7 @@ class WirelessCommunicationCluster:
     sum_packet_loss_rate: float = attrs.field(init=False)
 
     estimated_ideal_power: np.ndarray = attrs.field(init=False)
+    interference: np.ndarray = attrs.field(init=False)
 
     def __attrs_post_init__(self):
         """
@@ -269,6 +270,7 @@ class WirelessCommunicationCluster:
         self.estimated_ideal_power = np.zeros(
             shape=(self.num_devices, 2)
         )  # Unit: Percentage
+        self.interference = np.zeros_like(self.transmit_power)
 
     @classmethod
     def generate_postitions(
@@ -560,12 +562,14 @@ class WirelessCommunicationCluster:
 
         """
         rate = np.zeros(shape=(self.num_devices, 2))
+        interference = np.zeros_like(self.interference)
 
         for k in range(self.num_devices):
             sub_channel_index = self.allocation[k, 0]
             mW_beam_index = self.allocation[k, 1]
 
             if sub_channel_index != -1:
+                interference[k, 0] = interference[0, sub_channel_index]
                 sinr = gamma(
                     w=self.W_sub,
                     s=self.signal_power[0, sub_channel_index],
@@ -579,6 +583,7 @@ class WirelessCommunicationCluster:
                 )
 
             if mW_beam_index != -1:
+                interference[k, 1] = interference[1, mW_beam_index]
                 sinr = gamma(
                     w=self.W_mw,
                     s=self.signal_power[1, mW_beam_index],
@@ -588,6 +593,7 @@ class WirelessCommunicationCluster:
                 rate[k, 1] = compute_rate(w=self.W_mw, sinr=sinr)
 
         self.instant_rate = rate
+        self.interference = interference
 
         if init:
             return rate
@@ -810,6 +816,12 @@ class WirelessCommunicationCluster:
                 k, 0
             ]
             info[f"{prefix}/ Device {k+1}/ Average rate/ mmWave"] = self.average_rate[
+                k, 1
+            ]
+            info[f"{prefix}/ Device {k+1}/ Inteference/ Sub6GHz"] = self.interference[
+                k, 0
+            ]
+            info[f"{prefix}/ Device {k+1}/ Inteference/ mmWave"] = self.interference[
                 k, 1
             ]
 

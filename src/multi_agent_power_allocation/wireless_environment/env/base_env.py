@@ -202,8 +202,8 @@ class WirelessEnvironmentBase(ParallelEnv):
         return observations
 
     def get_infos(
-        self, rewards: Dict[int, Dict[str, float]]
-    ) -> Dict[int, Dict[str, float]]:
+        self, rewards: Dict[str, Dict[str, float]]
+    ) -> Dict[str, Dict[str, float]]:
         infos = {}
 
         for agent in self.agents:

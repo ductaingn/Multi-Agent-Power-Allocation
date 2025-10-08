@@ -151,7 +151,7 @@ class WirelessEnvironmentSACPA(WirelessEnvironmentBase):
             self.wc_clusters[wcc_agent].reset()
 
         observations = self.get_observations()
-        infos = {}
+        infos = {agent: {} for agent in self.agents}
         return observations, infos
 
     def compute_number_send_packet_and_power(
