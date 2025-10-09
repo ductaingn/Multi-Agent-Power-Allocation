@@ -47,10 +47,10 @@ class Logger:
             cluster_data: Dict = cluster_data[0]  # Unpack batch
             prefix = next(iter(cluster_data.keys())).split("/")[0]
 
-            num_sent_packet_acc = cluster_data.get(
+            num_sent_packet_acc = cluster_data.pop(
                 f"{prefix}/ Accumulate/ Num. Sent packet"
             )
-            num_received_packet_acc = cluster_data.get(
+            num_received_packet_acc = cluster_data.pop(
                 f"{prefix}/ Accumulate/ Num. Received packet"
             )
             fig = self.plot_interface_usage(
