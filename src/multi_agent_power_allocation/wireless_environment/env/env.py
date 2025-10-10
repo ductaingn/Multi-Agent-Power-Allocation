@@ -18,10 +18,11 @@ from multi_agent_power_allocation.wireless_environment.wireless_communication_cl
     compute_h_sub,
 )
 from multi_agent_power_allocation.utils.plot import plot_positions
+from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
 
 
 @attrs.define
-class WirelessEnvironmentBase(ParallelEnv):
+class WirelessEnvironment(ParallelEnv):
     """
     Base class for wireless environments in PettingZoo API.
     This class is designed to be extended by specific wireless environment implementations.
@@ -33,6 +34,8 @@ class WirelessEnvironmentBase(ParallelEnv):
         "name": "wireless_environment_base",
         "is_parallelizable": True,
     }
+
+    algorithm_list: List[Algorithm]
     reward_coef: Dict[str, float]
     wc_clusters_configs: List[Dict[str, Any]]
     n_warm_up_step: int = attrs.field()
@@ -47,6 +50,8 @@ class WirelessEnvironmentBase(ParallelEnv):
     wc_clusters: Dict[str, WirelessCommunicationCluster] = attrs.field(
         default={}, init=False
     )
+    algorithm_mapping: Dict[str, Algorithm] = attrs.field(init=False)
+    reward_qos: Dict[str, float] = attrs.field(init=False)
 
     def __attrs_post_init__(self):
         if self.seed:
@@ -56,6 +61,11 @@ class WirelessEnvironmentBase(ParallelEnv):
 
         self.agents: List[str] = [str(i) for i in range(self.num_cluster)]
         self.possible_agents = self.agents[:]
+        self.algorithm_mapping = {
+            agent: algorithm
+            for agent, algorithm in zip(self.agents, self.algorithm_list)
+        }
+        self.reward_qos = {agent: 0.0 for agent in self.agents}
 
         for i in range(self.num_cluster):
             if not (
@@ -87,31 +97,43 @@ class WirelessEnvironmentBase(ParallelEnv):
             )
 
     def reset(self, seed=None, options=None):
-        raise NotImplementedError("This method should be implemented by subclasses.")
+        for wcc_agent in self.wc_clusters:
+            wcc_agent: str
+            self.wc_clusters[wcc_agent].reset()
+
+        observations = self.get_observations()
+        infos = {agent: {} for agent in self.agents}
+        return observations, infos
 
     def compute_number_send_packet_and_power(
         self,
-        wc_cluster: WirelessCommunicationCluster,
+        agent: str,
         policy_network_output: torch.Tensor,
     ) -> None:
-        raise NotImplementedError("This method should be implemented by subclasses.")
+        wc_cluster = self.wc_clusters[agent]
+        algorithm = self.algorithm_mapping[agent]
+
+        algorithm.compute_number_send_packet_and_power(
+            wc_cluster, policy_network_output
+        )
 
     def _compute_action(self, agent: str, policy_network_output):
         """
         Compute action for one agent
         """
         wc_cluster = self.wc_clusters[agent]
-        wc_cluster.estimate_l_max()
-        self.compute_number_send_packet_and_power(wc_cluster, policy_network_output)
+        algorithm = self.algorithm_mapping[agent]
+        wc_cluster.estimate_l_max(algorithm)
+        self.compute_number_send_packet_and_power(agent, policy_network_output)
         wc_cluster.update_allocation()
         wc_cluster.update_signal_power()  # Must be updated after allocation
 
-    def compute_actions(self, policy_network_outputs):
+    def compute_actions(self, policy_outputs):
         """
         Compute actions accross all agents
         """
         for agent in self.agents:
-            self._compute_action(agent, policy_network_outputs[agent])
+            self._compute_action(agent, policy_outputs[agent])
 
     def _update_feedback(self, agent: str):
         """
@@ -177,7 +199,16 @@ class WirelessEnvironmentBase(ParallelEnv):
             self._update_feedback(agent)
 
     def _compute_rewards(self, agent: str) -> Dict[str, float]:
-        raise NotImplementedError("This method should be implemented by subclasses.")
+        algorithm = self.algorithm_mapping[agent]
+        wc_cluster = self.wc_clusters[agent]
+
+        rewards = algorithm.compute_reward(
+            wc_cluster, self.reward_qos[agent], self.reward_coef
+        )
+
+        self.reward_qos[agent] = rewards["reward_qos"]
+
+        return rewards
 
     def get_rewards(self) -> Dict[int, Dict[str, float]]:
         rewards = {}
@@ -189,7 +220,10 @@ class WirelessEnvironmentBase(ParallelEnv):
         return rewards
 
     def _get_state(self, agent: str) -> np.ndarray:
-        raise NotImplementedError("This method should be implemented by subclasses.")
+        algorithm = self.algorithm_mapping[agent]
+        wc_cluster = self.wc_clusters[agent]
+
+        return algorithm.get_state(wc_cluster)
 
     def get_observations(self) -> Dict[int, np.ndarray]:
         observations = {}
@@ -215,14 +249,64 @@ class WirelessEnvironmentBase(ParallelEnv):
 
         return infos
 
-    def step(self, actions):
-        raise NotImplementedError("This method should be implemented by subclasses.")
+    def state(self):
+        states = []
+        for agent in self.agents:
+            states.append(self._get_state(agent))
+
+        return np.array(states)
+
+    def estimate_CGINR(self):
+        for agent in self.agents:
+            algorithm = self.algorithm_mapping[agent]
+            if algorithm == Algorithm.SACPA:
+                self.wc_clusters[agent].estimate_CGINR()
+
+    def step(self, actions: torch.Tensor | np.ndarray):
+        """
+        Parameters
+        ----------
+            actions: torch.Tensor | np.ndarray
+                Comes directly from BaseAlgorithm.get_actions()
+        """
+        observations = {}
+        terminations = {agent: False for agent in self.agents}
+        truncations = {agent: False for agent in self.agents}
+        infos = {}
+
+        self.compute_actions(policy_outputs=actions)
+        self.get_feedbacks()
+        self.estimate_CGINR()
+
+        for wc_cluster in self.wc_clusters:
+            self.wc_clusters[wc_cluster].step()
+
+        _rewards = self.get_rewards()
+        rewards = {
+            agent: _rewards.get(agent).get("instant_reward") for agent in _rewards
+        }
+
+        observations = self.get_observations()
+
+        infos = self.get_infos(_rewards)
+
+        self.current_step += 1
+        if self.current_step > self.max_num_step + 1:
+            truncations = {agent: True for agent in self.agents}
+
+        return observations, rewards, terminations, truncations, infos
 
     def observation_space(self, agent):
-        raise NotImplementedError("This method should be implemented by subclasses.")
+        algorithm = self.algorithm_mapping[agent]
+        num_devices = self.wc_clusters[agent].num_devices
+        L_max = self.wc_clusters[agent].L_max
+        return algorithm.observation_space(num_devices, L_max)
 
     def action_space(self, agent):
-        raise NotImplementedError("This method should be implemented by subclasses.")
+        algorithm = self.algorithm_mapping[agent]
+        num_devices = self.wc_clusters[agent].num_devices
+        L_max = self.wc_clusters[agent].L_max
+        return algorithm.action_space(num_devices, L_max)
 
     def render(self):
         mode = self.render_mode

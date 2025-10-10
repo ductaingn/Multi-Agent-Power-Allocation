@@ -14,9 +14,9 @@ import torch
 
 import numpy as np
 
-from ..wireless_environment.env.vec_env import SyncVecEnv
+from ..wireless_environment.env.wrapper import SyncVecEnv
 from .logger import Logger
-from ..algorithms.algorithm import BaseAlgorithm
+from ..algorithms.base_algorithm import BaseAlgorithm
 from .replay_buffer import ReplayBuffer, ReplayBufferSamples
 
 
@@ -72,7 +72,7 @@ class MultiAgentTrainer:
         }
 
     @_last_obs.default
-    def __last_obs_factory(self):
+    def _last_obs_factory(self):
         obs, _ = self.multi_agent_manager.envs.reset()
         return {agent_id: np.array([obs[agent_id]]) for agent_id in obs}
 
@@ -89,14 +89,13 @@ class MultiAgentTrainer:
                     [self.multi_agent_manager.envs.action_spaces[agent_id].sample()]
                 )
             else:
-                agent_actions, _ = policy.get_actions(
+                agent_actions = policy.get_actions(
                     self._last_obs[agent_id], deterministic=False
                 )
                 agent_actions = agent_actions.detach().numpy()
 
             actions.update({agent_id: agent_actions})
 
-        # TODO: test with vecenv
         next_observations, rewards, terminations, truncations, infos = (
             self.multi_agent_manager.envs.step(actions)
         )

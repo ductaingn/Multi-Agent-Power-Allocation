@@ -18,18 +18,16 @@ import numpy as np
 
 from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic
-from multi_agent_power_allocation.wireless_environment.env import (
-    WirelessEnvironmentSACPA,
-    WirelessEnvironmentRandom,
-)
-from multi_agent_power_allocation.wireless_environment.env.vec_env import SyncVecEnv
-from multi_agent_power_allocation.algorithms.algorithm import SAC
+from multi_agent_power_allocation.wireless_environment.env import WirelessEnvironment
+from multi_agent_power_allocation.wireless_environment.env.wrapper import SyncVecEnv
+from multi_agent_power_allocation.algorithms.sac import SAC
 from multi_agent_power_allocation.utils.logger import Logger
 from multi_agent_power_allocation.utils.replay_buffer import ReplayBuffer
 from multi_agent_power_allocation.utils.multi_agent import (
     MultiAgentTrainer,
     MultiAgentPolicyManager,
 )
+from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
 
 
 def parse_config(path: str) -> Dict:
@@ -101,6 +99,18 @@ def parse_config(path: str) -> Dict:
     env_config.update({"n_warm_up_step": config.get("n_warm_up_step")})
     env_config.update({"wc_clusters_configs": parsed_wc_clusters_configs})
 
+    algorithm_list: List[str] = env_config.pop("algorithm_list")
+    parsed_algorithms: List[Algorithm] = []
+    for algorithm in algorithm_list:
+        try:
+            parsed_algorithms.append(Algorithm(algorithm))
+        except ValueError as exc:
+            raise ValueError(
+                f"Unknown algorithm {algorithm}, valid ones: {[a.value for a in Algorithm]}"
+            ) from exc
+
+    env_config.update({"algorithm_list": parsed_algorithms})
+
     return config
 
 
@@ -110,7 +120,6 @@ class Trainer:
     Trainer
     """
 
-    algorithm: Literal["SACPA, SACPF, RAQL, Random"]
     env: str = attrs.field(init=False)
     env_config: Dict = attrs.field()
     num_agent: int = attrs.field(init=False)
@@ -125,7 +134,12 @@ class Trainer:
 
     @env_config.validator
     def _check_env_config(self, attribute, value: Dict):
-        must_have_keys = ["num_cluster", "wc_clusters_configs", "max_num_step"]
+        must_have_keys = [
+            "num_cluster",
+            "wc_clusters_configs",
+            "max_num_step",
+            "algorithm_list",
+        ]
 
         for key in must_have_keys:
             if key not in value:
@@ -159,20 +173,13 @@ class Trainer:
                 raise ValueError(f"model_config must contain {key}!")
 
     def __attrs_post_init__(self):
-        self.env = f"WirelessEnvironment{self.algorithm}-v2"
         self.max_num_step = self.env_config["max_num_step"]
         self.num_agent = self.env_config["num_cluster"]
         self.policies = [f"agent_{i}_policy" for i in range(self.num_agent)]
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     def get_env(self):
-        env_parallel = None
-        if self.algorithm == "SACPA":
-            return WirelessEnvironmentSACPA(**deepcopy(self.env_config))
-        if self.algorithm == "Random":
-            return WirelessEnvironmentRandom(**deepcopy(self.env_config))
-        else:
-            raise ValueError(f"Unsupported algorithm: {self.algorithm}")
+        return WirelessEnvironment(**deepcopy(self.env_config))
 
     def get_policies(self) -> Tuple[List, List, List]:
         env = self.get_env()
@@ -252,7 +259,7 @@ class Trainer:
         # ======== logging setup =========
         logger = Logger(
             project=self.wandb_config["project"],
-            config={"algorithm": self.algorithm, "env_config": self.env_config},
+            config={"env_config": self.env_config},
             name=run_name,
         )
 

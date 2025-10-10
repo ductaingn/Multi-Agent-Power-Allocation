@@ -1,6 +1,5 @@
-from abc import ABC
 from copy import deepcopy
-from typing import Tuple, Any
+from typing import Tuple
 
 import attrs
 
@@ -11,27 +10,13 @@ from torch.distributions import Independent, Normal
 
 import numpy as np
 
+from multi_agent_power_allocation.algorithms.base_algorithm import BaseAlgorithm
 from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic
 from multi_agent_power_allocation.utils.replay_buffer import ReplayBufferSamples
 
 
 @attrs.define
-class BaseAlgorithm(ABC):
-    actor: Any | SACPAACtor
-
-    def get_actions(self, obs, **kwargs):
-        raise NotImplementedError()
-
-    def learn(self, data: ReplayBufferSamples):
-        raise NotImplementedError()
-
-
-@attrs.define
-class OffPolicyAlgorithm(BaseAlgorithm): ...
-
-
-@attrs.define
-class SAC(OffPolicyAlgorithm):
+class SAC(BaseAlgorithm):
     actor: SACPAACtor
     actor_optim: optim.Optimizer
     critic: SACPACritic
@@ -64,8 +49,8 @@ class SAC(OffPolicyAlgorithm):
         self.critic.train(mode)
         self.critic2.train(mode)
 
-    def get_actions(
-        self, obs, deterministic: bool
+    def _get_actions(
+        self, obs, deterministic: bool = False, **kwargs
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         mu, std = self.actor(obs)
         action_dist = Independent(
@@ -87,6 +72,17 @@ class SAC(OffPolicyAlgorithm):
 
         return action, log_prob
 
+    def get_actions(self, obs, deterministic: bool = False, **kwargs) -> torch.Tensor:
+        action, _ = self._get_actions(obs, deterministic)
+        return action
+
+    def get_actions_log_prob(
+        self, obs, deterministic: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        action, log_prob = self._get_actions(obs, deterministic)
+
+        return action, log_prob
+
     def optimize_critic(
         self,
         data: ReplayBufferSamples,
@@ -95,7 +91,7 @@ class SAC(OffPolicyAlgorithm):
         optimizer: optim.Optimizer,
     ):
         with torch.no_grad():
-            next_actions, next_log_prob = self.get_actions(
+            next_actions, next_log_prob = self.get_actions_log_prob(
                 data.next_observations, False
             )
             next_q_values = torch.cat(
@@ -141,7 +137,7 @@ class SAC(OffPolicyAlgorithm):
         actor_losses, critic_losses, critic2_losses = [], [], []
 
         for gradient_step in range(self.gradient_steps):
-            actions, log_prob = self.get_actions(data.observations, False)
+            actions, log_prob = self.get_actions_log_prob(data.observations, False)
 
             # Update entropy coefficient
             alpha_log_prob = log_prob.detach() + self.target_entropy
