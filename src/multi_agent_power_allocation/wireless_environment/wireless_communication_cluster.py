@@ -294,6 +294,13 @@ class WirelessCommunicationCluster:
         )
         clusters.append(
             {
+                "AP": [-100.0, 100.0],
+                "devices": [[-80.0, 100.0], [-100.0, 120.0], [-185.0, 20.0]],
+                "obstacles": [[[-90.0, 110.0], [-110.0, 110.0]]],
+            }
+        )
+        clusters.append(
+            {
                 "AP": [-100.0, -100.0],
                 "devices": [[-80.0, -100.0], [-100.0, -80.0], [-185.0, -180.0]],
                 "obstacles": [[[-90.0, -90.0], [-110.0, -90.0]]],
@@ -301,14 +308,14 @@ class WirelessCommunicationCluster:
         )
         clusters.append(
             {
-                "AP": [-100.0, 100.0],
-                "devices": [[-80.0, 100.0], [-100.0, 120.0], [-185.0, 20.0]],
-                "obstacles": [[[-90.0, 110.0], [-110.0, 110.0]]],
+                "AP": [100.0, -100.0],
+                "devices": [[80.0, -100.0], [100.0, -80.0], [15.0, -180.0]],
+                "obstacles": [[[110.0, -90.0], [90.0, -90.0]]],
             }
         )
 
-        if num_cluster > 3:
-            raise NotImplementedError("Supported upto 3 APs only!")
+        if num_cluster > 4:
+            raise NotImplementedError("Supported upto 4 APs only!")
 
         for i in range(num_cluster):
 

@@ -100,6 +100,14 @@ def parse_config(path: str) -> Dict:
     env_config.update({"wc_clusters_configs": parsed_wc_clusters_configs})
 
     algorithm_list: List[str] = env_config.pop("algorithm_list")
+    if len(algorithm_list) != num_cluster:
+        raise ValueError(
+            f"""
+            Number of algorithm must match the number of clusters!
+            Number of cluster: {num_cluster}
+            Algorithm list: {algorithm_list}
+            """
+        )
     parsed_algorithms: List[Algorithm] = []
     for algorithm in algorithm_list:
         try:
