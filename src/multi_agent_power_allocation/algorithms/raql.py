@@ -4,6 +4,8 @@ import pickle
 
 import attrs
 
+import torch
+
 import numpy as np
 
 import gymnasium as gym
@@ -138,7 +140,7 @@ class Table:
 @attrs.define
 class QTable(Table):
     best_action_cache: Dict = attrs.field(
-        init=False, default=Dict()
+        init=False, default=dict()
     )  # Cache: state -> best_action
 
     def update(self, state, action, value):
@@ -321,7 +323,7 @@ class RAQL(BaseAlgorithm):
 
     @V_tables.default
     def _V_tables_factory(self):
-        return [QTable() for _ in range(self.num_q_table)]
+        return [VTable() for _ in range(self.num_q_table)]
 
     @Alpha_tables.default
     def _Alpha_tables_factory(self):
@@ -343,6 +345,7 @@ class RAQL(BaseAlgorithm):
 
     def get_actions(self, obs, **kwargs):
         unbatched_obs = self.unbatch_obs(obs)
+        batched_actions = []
         for o in unbatched_obs:
             state = tuple(o.flatten().tolist())
             H = np.random.randint(0, self.num_q_table)
@@ -380,6 +383,10 @@ class RAQL(BaseAlgorithm):
 
                 if risk_averse_Q.table[state][action] < risk_averse_Q.default_value:
                     action = self.action_space.sample()
+
+            batched_actions.append(action)
+
+        return torch.tensor(batched_actions)
 
     def u(self, x):
         u = -np.exp(self.beta * x)

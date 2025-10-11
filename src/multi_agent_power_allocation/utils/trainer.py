@@ -21,6 +21,8 @@ from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic
 from multi_agent_power_allocation.wireless_environment.env import WirelessEnvironment
 from multi_agent_power_allocation.wireless_environment.env.wrapper import SyncVecEnv
 from multi_agent_power_allocation.algorithms.sac import SAC
+from multi_agent_power_allocation.algorithms.raql import RAQL
+from multi_agent_power_allocation.algorithms.random import Random
 from multi_agent_power_allocation.utils.logger import Logger
 from multi_agent_power_allocation.utils.replay_buffer import ReplayBuffer
 from multi_agent_power_allocation.utils.multi_agent import (
@@ -192,58 +194,73 @@ class Trainer:
     def get_policies(self) -> Tuple[List, List, List]:
         env = self.get_env()
 
+        algorithm_list = self.env_config["algorithm_list"]
         policies = []
         schedulers = []
         replay_buffers = []
 
-        for agent_id, agent in enumerate(env.agents):
+        for agent, algorithm in zip(env.agents, algorithm_list):
             obs_space = env.observation_space(agent)
             action_space = env.action_space(agent)
 
-            actor = SACPAACtor(
-                observation_space=obs_space,
-                action_space=action_space,
-                **self.model_config,
-            ).to(self.device)
-            actor_optim = Adam(actor.parameters(), lr=self.SAC_config["lr"])
-            critic1 = SACPACritic(
-                observation_space=obs_space,
-                action_space=action_space,
-                **self.model_config,
-            ).to(self.device)
-            critic1_optim = Adam(critic1.parameters(), lr=self.SAC_config["lr"])
-            critic2 = SACPACritic(
-                observation_space=obs_space,
-                action_space=action_space,
-                **self.model_config,
-            ).to(self.device)
-            critic2_optim = Adam(critic2.parameters(), lr=self.SAC_config["lr"])
+            if algorithm == Algorithm.SACPA or algorithm == Algorithm.SACPF:
+                actor = SACPAACtor(
+                    observation_space=obs_space,
+                    action_space=action_space,
+                    **self.model_config,
+                ).to(self.device)
+                actor_optim = Adam(actor.parameters(), lr=self.SAC_config["lr"])
+                critic1 = SACPACritic(
+                    observation_space=obs_space,
+                    action_space=action_space,
+                    **self.model_config,
+                ).to(self.device)
+                critic1_optim = Adam(critic1.parameters(), lr=self.SAC_config["lr"])
+                critic2 = SACPACritic(
+                    observation_space=obs_space,
+                    action_space=action_space,
+                    **self.model_config,
+                ).to(self.device)
+                critic2_optim = Adam(critic2.parameters(), lr=self.SAC_config["lr"])
 
-            # auto entropy tuning setup
-            target_entropy = float(-np.prod(action_space.shape))
-            log_alpha = (
-                torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
-            )
-            alpha_optim = Adam([log_alpha], lr=self.SAC_config["lr"])
+                # auto entropy tuning setup
+                target_entropy = float(-np.prod(action_space.shape))
+                log_alpha = (
+                    torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
+                )
+                alpha_optim = Adam([log_alpha], lr=self.SAC_config["lr"])
 
-            schedulers += [
-                CosineAnnealingLR(actor_optim, T_max=self.env_config["max_num_step"]),
-                CosineAnnealingLR(critic1_optim, T_max=self.env_config["max_num_step"]),
-                CosineAnnealingLR(critic2_optim, T_max=self.env_config["max_num_step"]),
-                CosineAnnealingLR(alpha_optim, T_max=self.env_config["max_num_step"]),
-            ]
+                schedulers += [
+                    CosineAnnealingLR(
+                        actor_optim, T_max=self.env_config["max_num_step"]
+                    ),
+                    CosineAnnealingLR(
+                        critic1_optim, T_max=self.env_config["max_num_step"]
+                    ),
+                    CosineAnnealingLR(
+                        critic2_optim, T_max=self.env_config["max_num_step"]
+                    ),
+                    CosineAnnealingLR(
+                        alpha_optim, T_max=self.env_config["max_num_step"]
+                    ),
+                ]
 
-            policy = SAC(
-                actor,
-                actor_optim,
-                critic1,
-                critic1_optim,
-                critic2,
-                critic2_optim,
-                target_entropy,
-                log_alpha,
-                alpha_optim,
-            )
+                policy = SAC(
+                    actor,
+                    actor_optim,
+                    critic1,
+                    critic1_optim,
+                    critic2,
+                    critic2_optim,
+                    target_entropy,
+                    log_alpha,
+                    alpha_optim,
+                )
+            elif algorithm == Algorithm.RAQL:
+                policy = RAQL(action_space)
+            else:
+                policy = Random(action_space)
+
             policies.append(policy)
 
             replay_buffer = ReplayBuffer(
@@ -272,12 +289,14 @@ class Trainer:
         )
 
         for agent_id in range(self.num_agent):
-            logger.wandb_run.watch(
-                multi_agent_manager.policies[agent_id].actor,
-                log="gradients",
-                log_freq=100,
-                idx=agent_id,
-            )
+            actor = multi_agent_manager.policies[agent_id].actor
+            if isinstance(actor, torch.nn.Module):
+                logger.wandb_run.watch(
+                    actor,
+                    log="gradients",
+                    log_freq=100,
+                    idx=agent_id,
+                )
 
         # ======== trainer setup ========
         trainer = MultiAgentTrainer(

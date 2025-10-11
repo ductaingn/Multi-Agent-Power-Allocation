@@ -402,7 +402,9 @@ class Algorithm(Enum):
                 wc_cluster.num_send_packet, wc_cluster.L_max
             )
         else:
-            number_of_send_packet = np.zeros(shape=(wc_cluster.num_devices, 2))
+            number_of_send_packet = np.zeros(
+                shape=(wc_cluster.num_devices, 2), dtype=int
+            )
 
             for k in range(wc_cluster.num_devices):
                 if policy_output[k] == 0:
