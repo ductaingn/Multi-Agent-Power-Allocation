@@ -23,6 +23,7 @@ from multi_agent_power_allocation.wireless_environment.utils import (
     segments_intersect,
 )
 from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
+from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
 
 
 @attrs.define(slots=False)
@@ -173,6 +174,7 @@ class WirelessCommunicationCluster:
     sum_packet_loss_rate: float = attrs.field(init=False)
 
     estimated_ideal_power: np.ndarray = attrs.field(init=False)
+    per_device_interference: np.ndarray = attrs.field(init=False)
 
     def __attrs_post_init__(self):
         """
@@ -269,6 +271,7 @@ class WirelessCommunicationCluster:
         self.estimated_ideal_power = np.zeros(
             shape=(self.num_devices, 2)
         )  # Unit: Percentage
+        self.per_device_interference = np.zeros_like(self.transmit_power)
 
     @classmethod
     def generate_postitions(
@@ -291,6 +294,13 @@ class WirelessCommunicationCluster:
         )
         clusters.append(
             {
+                "AP": [-100.0, 100.0],
+                "devices": [[-80.0, 100.0], [-100.0, 120.0], [-185.0, 20.0]],
+                "obstacles": [[[-90.0, 110.0], [-110.0, 110.0]]],
+            }
+        )
+        clusters.append(
+            {
                 "AP": [-100.0, -100.0],
                 "devices": [[-80.0, -100.0], [-100.0, -80.0], [-185.0, -180.0]],
                 "obstacles": [[[-90.0, -90.0], [-110.0, -90.0]]],
@@ -298,14 +308,14 @@ class WirelessCommunicationCluster:
         )
         clusters.append(
             {
-                "AP": [-100.0, 100.0],
-                "devices": [[-80.0, 100.0], [-100.0, 120.0], [-185.0, 20.0]],
-                "obstacles": [[[-90.0, 110.0], [-110.0, 110.0]]],
+                "AP": [100.0, -100.0],
+                "devices": [[80.0, -100.0], [100.0, -80.0], [15.0, -180.0]],
+                "obstacles": [[[110.0, -90.0], [90.0, -90.0]]],
             }
         )
 
-        if num_cluster > 3:
-            raise NotImplementedError("Supported upto 3 APs only!")
+        if num_cluster > 4:
+            raise NotImplementedError("Supported upto 4 APs only!")
 
         for i in range(num_cluster):
 
@@ -560,12 +570,14 @@ class WirelessCommunicationCluster:
 
         """
         rate = np.zeros(shape=(self.num_devices, 2))
+        per_device_interference = np.zeros_like(self.transmit_power)
 
         for k in range(self.num_devices):
             sub_channel_index = self.allocation[k, 0]
             mW_beam_index = self.allocation[k, 1]
 
             if sub_channel_index != -1:
+                per_device_interference[k, 0] = interference[0, sub_channel_index]
                 sinr = gamma(
                     w=self.W_sub,
                     s=self.signal_power[0, sub_channel_index],
@@ -579,6 +591,7 @@ class WirelessCommunicationCluster:
                 )
 
             if mW_beam_index != -1:
+                per_device_interference[k, 1] = interference[1, mW_beam_index]
                 sinr = gamma(
                     w=self.W_mw,
                     s=self.signal_power[1, mW_beam_index],
@@ -588,6 +601,7 @@ class WirelessCommunicationCluster:
                 rate[k, 1] = compute_rate(w=self.W_mw, sinr=sinr)
 
         self.instant_rate = rate
+        self.per_device_interference = per_device_interference
 
         if init:
             return rate
@@ -693,7 +707,7 @@ class WirelessCommunicationCluster:
 
         self.num_received_packet = np.minimum(self.num_send_packet, l_max, dtype=int)
 
-    def estimate_l_max(self) -> None:
+    def estimate_l_max(self, algorithm: "Algorithm") -> None:
         """
         Estimate the maximum number of packets that can be sent to each device based on the average rate and current QoS state of each device.
 
@@ -702,10 +716,13 @@ class WirelessCommunicationCluster:
         None
         """
         l = np.multiply(self.average_rate, self.T / self.D)
-        packet_successful_rate = (
-            np.ones(shape=(self.num_devices, 2)) - self.packet_loss_rate
-        )
-        l_max_estimate = np.floor(l * packet_successful_rate)
+        if algorithm == Algorithm.RAQL:
+            l_max_estimate = np.floor(l)
+        else:
+            packet_successful_rate = (
+                np.ones(shape=(self.num_devices, 2)) - self.packet_loss_rate
+            )
+            l_max_estimate = np.floor(l * packet_successful_rate)
 
         self.l_max_estimate = l_max_estimate
 
@@ -812,6 +829,12 @@ class WirelessCommunicationCluster:
             info[f"{prefix}/ Device {k+1}/ Average rate/ mmWave"] = self.average_rate[
                 k, 1
             ]
+            info[f"{prefix}/ Device {k+1}/ Interference/ Sub6GHz"] = (
+                self.per_device_interference[k, 0]
+            )
+            info[f"{prefix}/ Device {k+1}/ Interference/ mmWave"] = (
+                self.per_device_interference[k, 1]
+            )
 
             if hasattr(self, "estimated_ideal_power"):
                 info[f"{prefix}/ Device {k+1}/ Estimated ideal power/ Sub6GHz"] = (

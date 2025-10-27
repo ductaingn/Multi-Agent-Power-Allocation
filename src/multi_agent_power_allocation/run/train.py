@@ -31,9 +31,7 @@ def main():
 
     trainer = Trainer(**config)
 
-    result = trainer.train(args.run_name)
-
-    pprint.pprint(result)
+    trainer.train(args.run_name)
 
 
 if __name__ == "__main__":

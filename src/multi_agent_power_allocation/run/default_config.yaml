@@ -1,8 +1,7 @@
-algorithm: "SACPA"  #Literal["SACPA, SACPF, RAQL, Random"]
-
 env_config:
+  algorithm_list: ["SACPF", "SACPF", "SACPF", "SACPF"] #Literal["SACPA, SACPF, RAQL, Random"]
   # render_mode: "human"
-  num_cluster: 3
+  num_cluster: 4
   max_num_step: 10000
   seed: 1
   
@@ -11,7 +10,7 @@ env_config:
     reward_power: 10.0
 
   wc_cluster_config:
-    scenario: "scenario_2" # should be placed in src/data folder
+    scenario: "scenario_4" # should be placed in src/data folder
     num_devices: 3
     num_sub_channel: 5
     num_beam: 5

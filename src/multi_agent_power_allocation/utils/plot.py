@@ -147,25 +147,18 @@ def plot_positions(ax: Axes, positions: List[Dict], colors: Colormap) -> None:
 if __name__ == "__main__":
     import json
 
-    positions = []
-    with open(
-        "/home/nguyen/Projects/MultiAgentPowerAllocation/multi-agent-power-allocation/src/multi_agent_power_allocation/data/scenario_2/cluster_0/positions.json",
-        "rt",
-    ) as file:
-        positions.append(json.load(file))
-        positions[0].update({"ID": 0})
-    with open(
-        "/home/nguyen/Projects/MultiAgentPowerAllocation/multi-agent-power-allocation/src/multi_agent_power_allocation/data/scenario_2/cluster_1/positions.json",
-        "rt",
-    ) as file:
-        positions.append(json.load(file))
-        positions[1].update({"ID": 1})
-    with open(
-        "/home/nguyen/Projects/MultiAgentPowerAllocation/multi-agent-power-allocation/src/multi_agent_power_allocation/data/scenario_2/cluster_2/positions.json",
-        "rt",
-    ) as file:
-        positions.append(json.load(file))
-        positions[2].update({"ID": 2})
+    scenario = "scenario_4"
+    data_path = os.path.join(BASE_DIR, "data", scenario)
+    cluster_folders = sorted(os.listdir(data_path))
+    print(cluster_folders)
+
+    positions: List[Dict] = []
+    for cluster_id, cluster_data_folder in enumerate(cluster_folders):
+        with open(
+            os.path.join(data_path, cluster_data_folder, "positions.json"), "rt"
+        ) as file:
+            positions.append(json.load(file))
+            positions[-1].update({"ID": cluster_id})
 
     ax = plt.subplot()
     ax.set_aspect("equal", adjustable="box")

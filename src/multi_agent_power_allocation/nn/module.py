@@ -1,5 +1,3 @@
-from tianshou.data import Batch
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -78,11 +76,9 @@ class SACPAACtor(nn.Module):
         self.mu = nn.Linear(256, action_dim)
         self.log_std = nn.Linear(256, action_dim)
 
-    def forward(self, obs, state=None, info={}):
+    def forward(self, obs):
         if isinstance(obs, np.ndarray):
             obs = torch.as_tensor(obs, dtype=torch.float32)
-        if isinstance(obs, Batch):
-            obs = torch.as_tensor(obs.obs, dtype=torch.float32)
         batch = obs.shape[0]
         features = self.features_extractor(obs.view(batch, -1))
         latent = self.latent_pi(features)
@@ -91,7 +87,7 @@ class SACPAACtor(nn.Module):
         std = torch.clamp(log_std, self.log_std_min, self.log_std_max).exp()
         logits = (mu, std)
 
-        return logits, state
+        return logits
 
 
 class SACPACritic(nn.Module):
@@ -127,8 +123,6 @@ class SACPACritic(nn.Module):
     def forward(self, obs, act):
         if isinstance(obs, np.ndarray):
             obs = torch.as_tensor(obs, dtype=torch.float32)
-        if isinstance(obs, Batch):
-            obs = torch.as_tensor(obs.obs, dtype=torch.float32)
         if isinstance(act, np.ndarray):
             act = torch.as_tensor(act, dtype=torch.float32)
 

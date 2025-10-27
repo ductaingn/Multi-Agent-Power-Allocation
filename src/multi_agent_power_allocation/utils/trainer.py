@@ -10,27 +10,26 @@ import json
 import yaml
 import attrs
 
-from tianshou.data import VectorReplayBuffer
-from tianshou.env import DummyVectorEnv
-from tianshou.env.pettingzoo_env import PettingZooEnv
-from tianshou.policy import SACPolicy, MultiAgentPolicyManager
-from tianshou.trainer import OffpolicyTrainer, BaseTrainer
-from tianshou.utils.lr_scheduler import MultipleLRSchedulers
-
-from pettingzoo.utils.conversions import parallel_to_aec
 import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
+
 import numpy as np
 
 from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic
-from multi_agent_power_allocation.wireless_environment.env import (
-    WirelessEnvironmentSACPA,
-    WirelessEnvironmentRandom,
-)
-from multi_agent_power_allocation.utils.collector import Collector
+from multi_agent_power_allocation.wireless_environment.env import WirelessEnvironment
+from multi_agent_power_allocation.wireless_environment.env.wrapper import SyncVecEnv
+from multi_agent_power_allocation.algorithms.sac import SAC
+from multi_agent_power_allocation.algorithms.raql import RAQL
+from multi_agent_power_allocation.algorithms.random import Random
 from multi_agent_power_allocation.utils.logger import Logger
+from multi_agent_power_allocation.utils.replay_buffer import ReplayBuffer
+from multi_agent_power_allocation.utils.multi_agent import (
+    MultiAgentTrainer,
+    MultiAgentPolicyManager,
+)
+from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
 
 
 def parse_config(path: str) -> Dict:
@@ -102,6 +101,26 @@ def parse_config(path: str) -> Dict:
     env_config.update({"n_warm_up_step": config.get("n_warm_up_step")})
     env_config.update({"wc_clusters_configs": parsed_wc_clusters_configs})
 
+    algorithm_list: List[str] = env_config.pop("algorithm_list")
+    if len(algorithm_list) != num_cluster:
+        raise ValueError(
+            f"""
+            Number of algorithm must match the number of clusters!
+            Number of cluster: {num_cluster}
+            Algorithm list: {algorithm_list}
+            """
+        )
+    parsed_algorithms: List[Algorithm] = []
+    for algorithm in algorithm_list:
+        try:
+            parsed_algorithms.append(Algorithm(algorithm))
+        except ValueError as exc:
+            raise ValueError(
+                f"Unknown algorithm {algorithm}, valid ones: {[a.value for a in Algorithm]}"
+            ) from exc
+
+    env_config.update({"algorithm_list": parsed_algorithms})
+
     return config
 
 
@@ -111,7 +130,6 @@ class Trainer:
     Trainer
     """
 
-    algorithm: Literal["SACPA, SACPF, RAQL, Random"]
     env: str = attrs.field(init=False)
     env_config: Dict = attrs.field()
     num_agent: int = attrs.field(init=False)
@@ -126,7 +144,12 @@ class Trainer:
 
     @env_config.validator
     def _check_env_config(self, attribute, value: Dict):
-        must_have_keys = ["num_cluster", "wc_clusters_configs", "max_num_step"]
+        must_have_keys = [
+            "num_cluster",
+            "wc_clusters_configs",
+            "max_num_step",
+            "algorithm_list",
+        ]
 
         for key in must_have_keys:
             if key not in value:
@@ -160,156 +183,124 @@ class Trainer:
                 raise ValueError(f"model_config must contain {key}!")
 
     def __attrs_post_init__(self):
-        self.env = f"WirelessEnvironment{self.algorithm}-v2"
         self.max_num_step = self.env_config["max_num_step"]
         self.num_agent = self.env_config["num_cluster"]
         self.policies = [f"agent_{i}_policy" for i in range(self.num_agent)]
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     def get_env(self):
-        env_parallel = None
-        if self.algorithm == "SACPA":
-            env_parallel = WirelessEnvironmentSACPA(**deepcopy(self.env_config))
-        if self.algorithm == "Random":
-            env_parallel = WirelessEnvironmentRandom(**deepcopy(self.env_config))
-        if env_parallel is not None:
-            env_aec = parallel_to_aec(env_parallel)
-            return PettingZooEnv(env_aec)
-        else:
-            raise ValueError(f"Unsupported algorithm: {self.algorithm}")
+        return WirelessEnvironment(**deepcopy(self.env_config))
 
-    def get_agents(self) -> Tuple[MultiAgentPolicyManager, List]:
+    def get_policies(self) -> Tuple[List, List, List]:
         env = self.get_env()
 
+        algorithm_list = self.env_config["algorithm_list"]
         policies = []
         schedulers = []
-        for agent_id, agent in enumerate(env.agents):
-            obs_space = env.env.observation_space(agent)
-            action_space = env.env.action_space(agent)
+        replay_buffers = []
 
-            actor = SACPAACtor(
-                observation_space=obs_space,
-                action_space=action_space,
-                **self.model_config,
-            ).to(self.device)
-            actor_optim = Adam(actor.parameters(), lr=self.SAC_config["lr"])
-            critic1 = SACPACritic(
-                observation_space=obs_space,
-                action_space=action_space,
-                **self.model_config,
-            ).to(self.device)
-            critic1_optim = Adam(critic1.parameters(), lr=self.SAC_config["lr"])
-            critic2 = SACPACritic(
-                observation_space=obs_space,
-                action_space=action_space,
-                **self.model_config,
-            ).to(self.device)
-            critic2_optim = Adam(critic2.parameters(), lr=self.SAC_config["lr"])
+        for agent, algorithm in zip(env.agents, algorithm_list):
+            obs_space = env.observation_space(agent)
+            action_space = env.action_space(agent)
 
-            # auto entropy tuning setup
-            target_entropy = float(-np.prod(action_space.shape))
-            log_alpha = (
-                torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
-            )
-            alpha_optim = Adam([log_alpha], lr=self.SAC_config["lr"])
+            if algorithm == Algorithm.SACPA or algorithm == Algorithm.SACPF:
+                actor = SACPAACtor(
+                    observation_space=obs_space,
+                    action_space=action_space,
+                    **self.model_config,
+                ).to(self.device)
+                actor_optim = Adam(actor.parameters(), lr=self.SAC_config["lr"])
+                critic1 = SACPACritic(
+                    observation_space=obs_space,
+                    action_space=action_space,
+                    **self.model_config,
+                ).to(self.device)
+                critic1_optim = Adam(critic1.parameters(), lr=self.SAC_config["lr"])
+                critic2 = SACPACritic(
+                    observation_space=obs_space,
+                    action_space=action_space,
+                    **self.model_config,
+                ).to(self.device)
+                critic2_optim = Adam(critic2.parameters(), lr=self.SAC_config["lr"])
 
-            schedulers += [
-                CosineAnnealingLR(actor_optim, T_max=self.env_config["max_num_step"]),
-                CosineAnnealingLR(critic1_optim, T_max=self.env_config["max_num_step"]),
-                CosineAnnealingLR(critic2_optim, T_max=self.env_config["max_num_step"]),
-                CosineAnnealingLR(alpha_optim, T_max=self.env_config["max_num_step"]),
-            ]
+                # auto entropy tuning setup
+                target_entropy = float(-np.prod(action_space.shape))
+                log_alpha = (
+                    torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
+                )
+                alpha_optim = Adam([log_alpha], lr=self.SAC_config["lr"])
 
-            policy = SACPolicy(
-                actor,
-                actor_optim,
-                critic1,
-                critic1_optim,
-                critic2,
-                critic2_optim,
-                alpha=(target_entropy, log_alpha, alpha_optim),
-            )
+                schedulers += [
+                    CosineAnnealingLR(
+                        actor_optim, T_max=self.env_config["max_num_step"]
+                    ),
+                    CosineAnnealingLR(
+                        critic1_optim, T_max=self.env_config["max_num_step"]
+                    ),
+                    CosineAnnealingLR(
+                        critic2_optim, T_max=self.env_config["max_num_step"]
+                    ),
+                    CosineAnnealingLR(
+                        alpha_optim, T_max=self.env_config["max_num_step"]
+                    ),
+                ]
+
+                policy = SAC(
+                    actor,
+                    actor_optim,
+                    critic1,
+                    critic1_optim,
+                    critic2,
+                    critic2_optim,
+                    target_entropy,
+                    log_alpha,
+                    alpha_optim,
+                )
+            elif algorithm == Algorithm.RAQL:
+                policy = RAQL(action_space)
+            else:
+                policy = Random(action_space)
 
             policies.append(policy)
 
-        policy = MultiAgentPolicyManager(
-            policies,
-            env,
-            # lr_scheduler=MultipleLRSchedulers(*schedulers)
-        )
+            replay_buffer = ReplayBuffer(
+                20_000,
+                obs_space,
+                action_space,
+                n_envs=self.num_env,
+            )
+            replay_buffers.append(replay_buffer)
 
-        return policy, env.agents
+        return policies, replay_buffers
 
-    def build(self, run_name: str) -> BaseTrainer:
+    def build(self, run_name: str) -> MultiAgentTrainer:
         # ======== environment setup =========
-        train_envs = DummyVectorEnv(
-            [lambda: self.get_env() for _ in range(self.num_env)]
-        )
+        train_envs = SyncVecEnv([self.get_env for _ in range(self.num_env)])
 
         # ======== agent setup =========
-        policy, agents = self.get_agents()
+        policies, replay_buffers = self.get_policies()
+        multi_agent_manager = MultiAgentPolicyManager(policies, train_envs)
 
         # ======== logging setup =========
         logger = Logger(
-            train_interval=1,
-            test_interval=1,
-            update_interval=1,
             project=self.wandb_config["project"],
-            config={"algorithm": self.algorithm, "env_config": self.env_config},
+            config={"env_config": self.env_config},
             name=run_name,
         )
 
         for agent_id in range(self.num_agent):
-            logger.wandb_run.watch(
-                policy.policies[agents[agent_id]].actor,
-                log="gradients",
-                log_freq=100,
-                idx=agent_id,
-            )
-
-        def log_params(step):
-            logger.wandb_run.log(
-                {
-                    "Learning rate": policy.policies[
-                        agents[0]
-                    ].actor_optim.param_groups[0]["lr"]
-                },
-                step=step,
-            )
-
-        # ======== collector setup =========
-        train_collector = Collector(
-            policy=policy,
-            env=train_envs,
-            buffer=VectorReplayBuffer(100_000 * self.num_env, buffer_num=self.num_env),
-            exploration_noise=True,
-        )
-        train_collector.load_logger(logger)
-
-        # ======== callback setup ========
-        def save_best_fn(policy):
-            model_save_path = os.path.join(logger.wandb_run.dir, "model", "policy.pth")
-            os.makedirs(os.path.join(logger.wandb_run.dir, "model"), exist_ok=True)
-            torch.save(policy.policies[agents[0]].state_dict(), model_save_path)
-
-        def train_fn(epoch, env_step):
-            log_params(env_step)
+            actor = multi_agent_manager.policies[agent_id].actor
+            if isinstance(actor, torch.nn.Module):
+                logger.wandb_run.watch(
+                    actor,
+                    log="gradients",
+                    log_freq=100,
+                    idx=agent_id,
+                )
 
         # ======== trainer setup ========
-        trainer = OffpolicyTrainer(
-            policy=policy,
-            train_collector=train_collector,
-            test_collector=None,
-            max_epoch=1,
-            step_per_epoch=10_000,
-            step_per_collect=1,
-            episode_per_test=1,
-            batch_size=256,
-            update_per_step=1,
-            save_best_fn=save_best_fn,
-            train_fn=train_fn,
-            logger=logger,
-            test_in_train=False,
+        trainer = MultiAgentTrainer(
+            multi_agent_manager, replay_buffers, self.max_num_step, 256, logger
         )
 
         return trainer
@@ -319,8 +310,6 @@ class Trainer:
 
         # torch.autograd.set_detect_anomaly(True)
 
-        result = trainer.run()
+        trainer.train()
 
         trainer.logger.wandb_run.finish(exit_code=0)
-
-        return result
