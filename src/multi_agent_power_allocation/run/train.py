@@ -1,19 +1,38 @@
-from multi_agent_power_allocation.utils.trainer import Trainer, process_default_config
-from multi_agent_power_allocation import BASE_DIR
 import os
 import argparse
+import pprint
+
+from multi_agent_power_allocation.utils.trainer import Trainer, parse_config
+from multi_agent_power_allocation import BASE_DIR
 
 
-arg_parser = argparse.ArgumentParser()
-arg_parser.add_argument('-dc', '--use_default_config', type=bool, default=True, required=False, help='Base path for configs and data')
-args = arg_parser.parse_args()
+def main():
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument(
+        "-cp",
+        "--config_path",
+        type=str,
+        default=os.path.join(BASE_DIR, "run", "default_config.yaml"),
+        required=False,
+        help="Base path for configs and data",
+    )
+    arg_parser.add_argument(
+        "-rn",
+        "--run_name",
+        type=str,
+        default="debugging",
+        required=False,
+        help="Name of the run (for logging purpose)",
+    )
+    args = arg_parser.parse_args()
 
-
-if __name__=="__main__":
-    if args.use_default_config:
-        default_config_path = os.path.join(BASE_DIR, "run", "default_config.yaml")
-        default_config:dict = process_default_config(default_config_path)
-        config = default_config
+    config_path = args.config_path
+    config: dict = parse_config(config_path)
 
     trainer = Trainer(**config)
-    result = trainer.train("testing")
+
+    trainer.train(args.run_name)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,8 @@
 __pycache__
 .vscode
-test.ipynb
+.venv
+/test.ipynb
+/test.py
 wandb
 debug.py
 *.egg-info
