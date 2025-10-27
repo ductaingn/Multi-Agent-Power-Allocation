@@ -21,6 +21,7 @@ supersuit = "^3.10.0"
 tqdm = "^4.67.1"
 rich = "^14.1.0"
 matplotlib = "^3.10.6"
+torchinfo = "^1.8.0"
 
 [[tool.poetry.source]]
 name = "torch-cpu"
