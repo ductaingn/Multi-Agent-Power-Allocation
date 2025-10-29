@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 import numpy as np
 
-from gymnasium.spaces import Space
+from gymnasium.spaces import Space, Discrete
 
 
 # CAP the standard deviation of the actor
@@ -132,3 +132,40 @@ class SACPACritic(nn.Module):
         q_value = self.qf(latent)
 
         return q_value
+
+
+class DQNQNetwork(nn.Module):
+    def __init__(
+        self,
+        observation_space: Space,
+        action_space: Discrete,
+        latent_dim,
+        num_devices,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(
+            *args,
+            **kwargs,
+        )
+
+        iot_device_state_dim, action_dim = (
+            observation_space.shape[-1],
+            action_space.n,
+        )
+
+        self.network = nn.Sequential(
+            nn.Linear(iot_device_state_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, action_dim),
+        )
+
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+        obs = obs.float()
+        action = self.network(obs)
+
+        return action

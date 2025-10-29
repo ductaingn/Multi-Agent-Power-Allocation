@@ -17,12 +17,13 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 import numpy as np
 
 from multi_agent_power_allocation import BASE_DIR
-from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic
+from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic, DQNQNetwork
 from multi_agent_power_allocation.wireless_environment.env import WirelessEnvironment
 from multi_agent_power_allocation.wireless_environment.env.wrapper import SyncVecEnv
 from multi_agent_power_allocation.algorithms.sac import SAC
 from multi_agent_power_allocation.algorithms.raql import RAQL
 from multi_agent_power_allocation.algorithms.random import Random
+from multi_agent_power_allocation.algorithms.dqn import DQN
 from multi_agent_power_allocation.utils.logger import Logger
 from multi_agent_power_allocation.utils.replay_buffer import ReplayBuffer
 from multi_agent_power_allocation.utils.multi_agent import (
@@ -258,8 +259,17 @@ class Trainer:
                 )
             elif algorithm == Algorithm.RAQL:
                 policy = RAQL(action_space)
-            else:
+            elif algorithm == Algorithm.RANDOM:
                 policy = Random(action_space)
+            elif algorithm == Algorithm.DQN:
+                q_net = DQNQNetwork(obs_space, action_space, **self.model_config).to(
+                    self.device
+                )
+                q_net_optim = Adam(q_net.parameters(), lr=self.SAC_config["lr"])
+
+                policy = DQN(q_net, q_net_optim, action_space)
+            else:
+                raise NotImplementedError
 
             policies.append(policy)
 
