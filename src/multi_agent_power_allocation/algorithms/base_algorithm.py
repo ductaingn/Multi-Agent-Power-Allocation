@@ -190,6 +190,19 @@ class SpaceParams:
             dtype=int,
         )
 
+    def build_action_space_dqn(self):
+        """
+        Build action space for DQN algorithm.
+        Action space contains:
+            - Which interface to send packets
+                `0` for Sub-6GHz
+                `1` for mmWave
+                `2` for both interfaces
+
+        Flattened
+        """
+        return gym.spaces.Discrete(3**self.num_devices)
+
 
 class Algorithm(Enum):
     """
@@ -198,12 +211,13 @@ class Algorithm(Enum):
 
     SACPA = "SACPA"
     SACPF = "SACPF"
+    DQN = "DQN"
     RAQL = "RAQL"
     RANDOM = "Random"
 
     def observation_space(self, num_devices: int, L_max: int):
         params = SpaceParams(num_devices, L_max)
-        if self == Algorithm.RAQL:
+        if self == Algorithm.RAQL or self == Algorithm.DQN:
             return params.build_obs_space_raql()
         else:
             return params.build_obs_space()
@@ -212,6 +226,19 @@ class Algorithm(Enum):
         params = SpaceParams(num_devices, L_max)
         if self == Algorithm.RAQL:
             return params.build_action_space_raql()
+        if self == Algorithm.DQN:
+            grids = np.meshgrid(*[np.arange(3)] * num_devices, indexing="ij")
+            states = (
+                np.stack(grids, axis=0).reshape(num_devices, -1).T
+            )  # shape: (3**num_devices, num_devices)
+
+            # store reversed state vectors to match original behavior
+            values = states[:, ::-1].copy()
+            hash_map = {i: values[i] for i in range(values.shape[0])}
+
+            self.interface_hash_map = hash_map
+
+            return params.build_action_space_dqn()
         else:
             return params.build_action_space()
 
@@ -240,6 +267,10 @@ class Algorithm(Enum):
             self.compute_number_send_packet_and_power_RAQL(wc_cluster, policy_output)
         elif self == Algorithm.RANDOM:
             self.compute_number_send_packet_and_power_Random(wc_cluster, policy_output)
+        elif self == Algorithm.DQN:
+            self.compute_number_send_packet_and_power_DQN(wc_cluster, policy_output)
+        else:
+            raise NotImplementedError
 
     def compute_number_send_packet_and_power_SACPA(
         self,
@@ -439,6 +470,58 @@ class Algorithm(Enum):
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)
 
+    def compute_number_send_packet_and_power_DQN(
+        self, wc_cluster: "WirelessCommunicationCluster", policy_output: torch.Tensor
+    ) -> None:
+        power = np.full(
+            shape=(wc_cluster.num_devices, 2),
+            fill_value=1.0 / (wc_cluster.num_sub_channel + wc_cluster.num_beam),
+        )
+
+        if wc_cluster.current_step <= wc_cluster.n_warm_up_step:
+            number_of_send_packet = np.full_like(
+                wc_cluster.num_send_packet, wc_cluster.L_max
+            )
+        else:
+            number_of_send_packet = np.zeros(
+                shape=(wc_cluster.num_devices, 2), dtype=int
+            )
+
+            interfaces = self.interface_hash_map[policy_output]
+
+            for k in range(wc_cluster.num_devices):
+                if interfaces[k] == 0:
+                    number_of_send_packet[k, 0] = max(
+                        1, min(wc_cluster.l_max_estimate[k, 0], wc_cluster.L_max)
+                    )
+
+                if interfaces[k] == 1:
+                    number_of_send_packet[k, 1] = max(
+                        1, min(wc_cluster.l_max_estimate[k, 1], wc_cluster.L_max)
+                    )
+
+                if interfaces[k] == 2:
+                    if wc_cluster.l_max_estimate[k, 1] < wc_cluster.L_max:
+                        number_of_send_packet[k, 1] = max(
+                            1, wc_cluster.l_max_estimate[k, 1]
+                        )
+                        number_of_send_packet[k, 0] = min(
+                            max(1, wc_cluster.l_max_estimate[k, 0]),
+                            wc_cluster.L_max - number_of_send_packet[k, 1],
+                        )
+                    else:
+                        number_of_send_packet[k, 0] = 1
+                        number_of_send_packet[k, 1] = wc_cluster.L_max - 1
+
+                # For analysing purpose other channel
+                if number_of_send_packet[k, 0] == 0:
+                    power[k, 0] = 0
+                if number_of_send_packet[k, 1] == 0:
+                    power[k, 1] = 0
+
+        wc_cluster.set_num_send_packet(number_of_send_packet)
+        wc_cluster.set_transmit_power(power)
+
     def compute_number_send_packet_and_power_Random(
         self,
         wc_cluster: "WirelessCommunicationCluster",
@@ -486,7 +569,7 @@ class Algorithm(Enum):
         wc_cluster.set_transmit_power(power)
 
     def get_state(self, wc_cluster: "WirelessCommunicationCluster") -> np.ndarray:
-        if self == Algorithm.RAQL:
+        if self == Algorithm.RAQL or self == Algorithm.DQN:
             _state = np.zeros(
                 shape=(
                     wc_cluster.num_devices,
@@ -541,10 +624,16 @@ class Algorithm(Enum):
         prev_reward_qos: float,
         reward_coef: Dict[str, float],
     ) -> Dict[str, float]:
-        if self == Algorithm.RAQL:
+        if self == Algorithm.RAQL or self == Algorithm.DQN:
             return self.compute_reward_RAQL(wc_cluster, prev_reward_qos, reward_coef)
-        else:
+        elif (
+            self == Algorithm.SACPA
+            or self == Algorithm.SACPF
+            or self == Algorithm.RANDOM
+        ):
             return self.compute_reward_SACPA(wc_cluster, prev_reward_qos, reward_coef)
+        else:
+            raise NotImplementedError
 
     def compute_reward_SACPA(
         self,

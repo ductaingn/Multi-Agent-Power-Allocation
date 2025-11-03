@@ -188,7 +188,6 @@ class Logger:
             barmode="relative",
             xaxis_title="Device",
             yaxis_title="Number of packets",
-            title=title or "Interface Usage",
             bargap=0.3,  # spacing between groups
             legend=dict(
                 orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5
