@@ -745,7 +745,8 @@ class WirelessCommunicationCluster:
         #             device_position=self.device_positions[k], device_index=k,
         #             h_tilde=self.h_tilde[self.current_step, 1, k, mW_beam_index])
 
-        self.estimated_channel_power
+        # self.estimated_channel_power
+        ...
 
     def estimate_CGINR(self):
         """
