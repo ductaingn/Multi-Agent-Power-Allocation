@@ -1,5 +1,5 @@
 env_config:
-  algorithm_list: ["SACPF", "SACPF", "SACPF", "SACPF"] #Literal["SACPA, SACPF, RAQL, Random"]
+  algorithm_list: ["DQN", "DQN", "DQN", "DQN"] #Literal["SACPA, SACPF, RAQL, Random, DQN"]
   # render_mode: "human"
   num_cluster: 4
   max_num_step: 10000

@@ -716,13 +716,19 @@ class WirelessCommunicationCluster:
         None
         """
         l = np.multiply(self.average_rate, self.T / self.D)
-        if algorithm == Algorithm.RAQL:
+        if algorithm == Algorithm.RAQL or algorithm == Algorithm.DQN:
             l_max_estimate = np.floor(l)
-        else:
+        elif (
+            algorithm == Algorithm.SACPA
+            or algorithm == Algorithm.SACPF
+            or algorithm == Algorithm.RANDOM
+        ):
             packet_successful_rate = (
                 np.ones(shape=(self.num_devices, 2)) - self.packet_loss_rate
             )
             l_max_estimate = np.floor(l * packet_successful_rate)
+        else:
+            raise NotImplementedError
 
         self.l_max_estimate = l_max_estimate
 
