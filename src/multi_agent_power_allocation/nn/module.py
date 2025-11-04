@@ -49,6 +49,7 @@ class SACPAACtor(nn.Module):
         num_devices,
         log_std_min=LOG_STD_MIN,
         log_std_max=LOG_STD_MAX,
+        device="cpu",
         *args,
         **kwargs,
     ):
@@ -76,6 +77,8 @@ class SACPAACtor(nn.Module):
         self.mu = nn.Linear(256, action_dim)
         self.log_std = nn.Linear(256, action_dim)
 
+        self.to(device)
+
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
             obs = torch.as_tensor(obs, dtype=torch.float32)
@@ -97,6 +100,7 @@ class SACPACritic(nn.Module):
         action_space: Space,
         latent_dim,
         num_devices,
+        device="cpu",
         *args,
         **kwargs,
     ):
@@ -120,6 +124,8 @@ class SACPACritic(nn.Module):
 
         self.qf = nn.Linear(256, 1)
 
+        self.to(device)
+
     def forward(self, obs, act):
         if isinstance(obs, np.ndarray):
             obs = torch.as_tensor(obs, dtype=torch.float32)
@@ -141,6 +147,7 @@ class DQNQNetwork(nn.Module):
         action_space: Discrete,
         latent_dim,
         num_devices,
+        device="cpu",
         *args,
         **kwargs,
     ):
@@ -163,6 +170,8 @@ class DQNQNetwork(nn.Module):
             nn.ReLU(),
             nn.Linear(256, action_dim),
         )
+
+        self.to(device)
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         obs = obs.float()
