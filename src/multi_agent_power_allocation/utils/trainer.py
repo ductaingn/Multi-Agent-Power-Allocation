@@ -226,9 +226,7 @@ class Trainer:
 
                 # auto entropy tuning setup
                 target_entropy = float(-np.prod(action_space.shape))
-                log_alpha = (
-                    torch.log(torch.ones(1) * 1.0).requires_grad_(True).to(self.device)
-                )
+                log_alpha = torch.tensor([0.0], requires_grad=True, device=self.device)
                 alpha_optim = Adam([log_alpha], lr=self.SAC_config["lr"])
 
                 schedulers += [
