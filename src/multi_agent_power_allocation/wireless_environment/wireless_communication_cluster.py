@@ -21,6 +21,7 @@ from multi_agent_power_allocation.wireless_environment.utils import (
     compute_h_mW,
     generate_h_tilde,
     segments_intersect,
+    rotate_points,
 )
 from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
 from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
@@ -853,10 +854,37 @@ class WirelessCommunicationCluster:
 
         return info
 
+    def change_obstacle_positions(self):
+        if 2000 < self.current_step <= 4000:
+            # Change obstacles to block Device 1 instead of Device 2 in all clusters
+            # by rotating the obstacles around the center of their clusters
+            new_obstacle_positions = []
+            for obstacle_position, AP_position in zip(
+                self.obstacle_positions, self.AP_position
+            ):
+                new_obstacle_positions.append(
+                    rotate_points(obstacle_position, -90.0, AP_position)
+                )
+
+            self.obstacle_positions = np.array(new_obstacle_positions)
+
+        if 4000 < self.current_step <= 6000:
+            # Make obstacles block Device 2 again in all clusters
+            new_obstacle_positions = []
+            for obstacle_position, AP_position in zip(
+                self.obstacle_positions, self.AP_position
+            ):
+                new_obstacle_positions.append(
+                    rotate_points(obstacle_position, 90.0, AP_position)
+                )
+
+            self.obstacle_positions = np.array(new_obstacle_positions)
+
     def step(self):
         self.current_step += 1
         self.num_sent_packet_acc += self.num_send_packet
         self.num_received_packet_acc += self.num_received_packet
+        self.change_obstacle_positions()
 
     def reset(self):
         self.current_step = 1

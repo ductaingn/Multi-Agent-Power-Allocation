@@ -17,5 +17,3 @@ if __name__ == "__main__":
         actions = {agent: env.action_space(agent).sample() for agent in env.agents}
         obs, rewards, terminated, truncated, infos = env.step(actions)
         env.render()  # should pop up your matplotlib figure
-
-        time.sleep(1)

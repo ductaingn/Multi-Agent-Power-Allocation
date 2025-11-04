@@ -3,6 +3,7 @@ import argparse
 
 from multi_agent_power_allocation.utils.trainer import Trainer, parse_config
 from multi_agent_power_allocation import BASE_DIR
+from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
 
 
 def main():
@@ -19,7 +20,7 @@ def main():
         "-rn",
         "--run_name",
         type=str,
-        default="debugging",
+        default="Train with dynamic obstacles",
         required=False,
         help="Name of the run (for logging purpose)",
     )
@@ -28,9 +29,15 @@ def main():
     config_path = args.config_path
     config: dict = parse_config(config_path)
 
-    trainer = Trainer(**config)
+    for algorithm in Algorithm:
+        config["env_config"]["algorithm_list"] = [algorithm] * config["env_config"][
+            "num_cluster"
+        ]
+        trainer = Trainer(**config)
 
-    trainer.train(args.run_name)
+        run_name = args.run_name + f"with 4 {algorithm.name} clusters"
+
+        trainer.train(run_name)
 
 
 if __name__ == "__main__":
