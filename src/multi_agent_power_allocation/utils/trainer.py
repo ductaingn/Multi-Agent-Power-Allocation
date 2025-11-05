@@ -197,7 +197,7 @@ class Trainer:
 
         algorithm_list = self.env_config["algorithm_list"]
         policies = []
-        schedulers = []
+        # schedulers = []
         replay_buffers = []
 
         for agent, algorithm in zip(env.agents, algorithm_list):
@@ -209,19 +209,22 @@ class Trainer:
                     observation_space=obs_space,
                     action_space=action_space,
                     **self.model_config,
-                ).to(self.device)
+                    device=self.device,
+                )
                 actor_optim = Adam(actor.parameters(), lr=self.SAC_config["lr"])
                 critic1 = SACPACritic(
                     observation_space=obs_space,
                     action_space=action_space,
                     **self.model_config,
-                ).to(self.device)
+                    device=self.device,
+                )
                 critic1_optim = Adam(critic1.parameters(), lr=self.SAC_config["lr"])
                 critic2 = SACPACritic(
                     observation_space=obs_space,
                     action_space=action_space,
                     **self.model_config,
-                ).to(self.device)
+                    device=self.device,
+                )
                 critic2_optim = Adam(critic2.parameters(), lr=self.SAC_config["lr"])
 
                 # auto entropy tuning setup
@@ -229,20 +232,20 @@ class Trainer:
                 log_alpha = torch.tensor([0.0], requires_grad=True, device=self.device)
                 alpha_optim = Adam([log_alpha], lr=self.SAC_config["lr"])
 
-                schedulers += [
-                    CosineAnnealingLR(
-                        actor_optim, T_max=self.env_config["max_num_step"]
-                    ),
-                    CosineAnnealingLR(
-                        critic1_optim, T_max=self.env_config["max_num_step"]
-                    ),
-                    CosineAnnealingLR(
-                        critic2_optim, T_max=self.env_config["max_num_step"]
-                    ),
-                    CosineAnnealingLR(
-                        alpha_optim, T_max=self.env_config["max_num_step"]
-                    ),
-                ]
+                # schedulers += [
+                #     CosineAnnealingLR(
+                #         actor_optim, T_max=self.env_config["max_num_step"]
+                #     ),
+                #     CosineAnnealingLR(
+                #         critic1_optim, T_max=self.env_config["max_num_step"]
+                #     ),
+                #     CosineAnnealingLR(
+                #         critic2_optim, T_max=self.env_config["max_num_step"]
+                #     ),
+                #     CosineAnnealingLR(
+                #         alpha_optim, T_max=self.env_config["max_num_step"]
+                #     ),
+                # ]
 
                 policy = SAC(
                     actor,
