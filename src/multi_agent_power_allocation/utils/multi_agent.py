@@ -92,7 +92,7 @@ class MultiAgentTrainer:
                 agent_actions = policy.get_actions(
                     self._last_obs[agent_id], deterministic=False
                 )
-                agent_actions = agent_actions.detach().numpy()
+                agent_actions = agent_actions.detach().cpu().numpy()
 
             actions.update({agent_id: agent_actions})
 
