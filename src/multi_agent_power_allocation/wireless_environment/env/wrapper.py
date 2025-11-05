@@ -129,7 +129,6 @@ class SyncVecEnv:
         if batched_len != self.num_envs:
             raise ValueError("Batched actions must have first dim == num_envs")
         for i in range(self.num_envs):
-
             self._env_actions[i] = {
                 ag: np.asarray(actions[ag])[i] for ag in self.possible_agents
             }

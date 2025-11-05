@@ -260,25 +260,15 @@ class Algorithm(Enum):
         None
         """
         if self == Algorithm.SACPA:
-            self.compute_number_send_packet_and_power_SACPA(
-                wc_cluster, policy_output.cpu()
-            )
+            self.compute_number_send_packet_and_power_SACPA(wc_cluster, policy_output)
         elif self == Algorithm.SACPF:
-            self.compute_number_send_packet_and_power_SACPF(
-                wc_cluster, policy_output.cpu()
-            )
+            self.compute_number_send_packet_and_power_SACPF(wc_cluster, policy_output)
         elif self == Algorithm.RAQL:
-            self.compute_number_send_packet_and_power_RAQL(
-                wc_cluster, policy_output.cpu()
-            )
+            self.compute_number_send_packet_and_power_RAQL(wc_cluster, policy_output)
         elif self == Algorithm.RANDOM:
-            self.compute_number_send_packet_and_power_Random(
-                wc_cluster, policy_output.cpu()
-            )
+            self.compute_number_send_packet_and_power_Random(wc_cluster, policy_output)
         elif self == Algorithm.DQN:
-            self.compute_number_send_packet_and_power_DQN(
-                wc_cluster, policy_output.cpu()
-            )
+            self.compute_number_send_packet_and_power_DQN(wc_cluster, policy_output)
         else:
             raise NotImplementedError
 
