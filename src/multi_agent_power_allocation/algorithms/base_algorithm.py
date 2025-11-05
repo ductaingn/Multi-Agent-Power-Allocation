@@ -34,7 +34,7 @@ class DummyActor:
 class BaseAlgorithm(ABC):
     actor: DummyActor | SACPAACtor
 
-    def get_actions(self, obs, **kwargs) -> torch.Tensor:
+    def get_actions(self, obs: np.ndarray | torch.Tensor, **kwargs) -> torch.Tensor:
         raise NotImplementedError()
 
     def learn(

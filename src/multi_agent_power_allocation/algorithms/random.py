@@ -17,7 +17,8 @@ class Random(BaseAlgorithm):
     actor: DummyActor = attrs.field(init=False, default=DummyActor())
 
     def get_actions(self, obs, **kwargs):
-        return torch.rand(self.action_space.shape)
+        batch_size = obs.shape[0]
+        return torch.rand((batch_size,) + self.action_space.shape)
 
     def learn(self, data: ReplayBufferSamples):
         return [0.0] * 5
