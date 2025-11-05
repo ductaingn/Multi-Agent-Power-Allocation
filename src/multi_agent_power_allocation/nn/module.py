@@ -77,11 +77,12 @@ class SACPAACtor(nn.Module):
         self.mu = nn.Linear(256, action_dim)
         self.log_std = nn.Linear(256, action_dim)
 
-        self.to(device)
+        self.device = device
+        self.to(self.device)
 
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
-            obs = torch.as_tensor(obs, dtype=torch.float32)
+            obs = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
         batch = obs.shape[0]
         features = self.features_extractor(obs.view(batch, -1))
         latent = self.latent_pi(features)
@@ -124,13 +125,14 @@ class SACPACritic(nn.Module):
 
         self.qf = nn.Linear(256, 1)
 
-        self.to(device)
+        self.device = device
+        self.to(self.device)
 
     def forward(self, obs, act):
         if isinstance(obs, np.ndarray):
-            obs = torch.as_tensor(obs, dtype=torch.float32)
+            obs = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
         if isinstance(act, np.ndarray):
-            act = torch.as_tensor(act, dtype=torch.float32)
+            act = torch.as_tensor(act, dtype=torch.float32, device=self.device)
 
         batch = obs.shape[0]
         features = self.features_extractor(obs.view(batch, -1))
@@ -171,10 +173,13 @@ class DQNQNetwork(nn.Module):
             nn.Linear(256, action_dim),
         )
 
-        self.to(device)
+        self.device = device
+        self.to(self.device)
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
-        obs = obs.float()
+        if isinstance(obs, np.ndarray):
+            obs = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
+        obs = obs.float().to(self.device)
         action = self.network(obs)
 
         return action
