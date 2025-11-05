@@ -111,7 +111,7 @@ class DQN(BaseAlgorithm):
             torch.nn.utils.clip_grad_norm_(self.q_net.parameters(), self.max_grad_norm)
             self.q_net_optim.step()
 
-            losses.append(loss.item())
+            losses.append(loss.cpu().item())
 
             self.sync_target_weights()
 

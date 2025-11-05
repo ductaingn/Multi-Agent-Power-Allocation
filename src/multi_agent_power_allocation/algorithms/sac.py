@@ -116,7 +116,7 @@ class SAC(BaseAlgorithm):
         critic_loss.backward()
         optimizer.step()
 
-        return critic_loss.item()
+        return critic_loss.cpu().item()
 
     def soft_update(self, params, target_params):
         for param, target_param in zip(params, target_params):
@@ -142,7 +142,7 @@ class SAC(BaseAlgorithm):
             # Update entropy coefficient
             alpha_log_prob = log_prob.detach() + self.target_entropy
             alpha_loss = -(self.log_alpha * alpha_log_prob).mean()
-            alpha_losses.append(alpha_loss.item())
+            alpha_losses.append(alpha_loss.cpu().item())
             alpha = torch.exp(self.log_alpha.detach())
             alphas.append(alpha)
 
@@ -169,7 +169,7 @@ class SAC(BaseAlgorithm):
             actor_loss.backward()
             self.actor_optim.step()
 
-            actor_losses.append(actor_loss.item())
+            actor_losses.append(actor_loss.cpu().item())
 
             self.sync_target_weights()
 
