@@ -144,7 +144,7 @@ class SAC(BaseAlgorithm):
             alpha_loss = -(self.log_alpha * alpha_log_prob).mean()
             alpha_losses.append(alpha_loss.cpu().item())
             alpha = torch.exp(self.log_alpha.detach())
-            alphas.append(alpha)
+            alphas.append(alpha.cpu().numpy())
 
             self.alpha_optim.zero_grad()
             alpha_loss.backward()
