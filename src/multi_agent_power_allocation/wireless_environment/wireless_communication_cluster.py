@@ -855,7 +855,7 @@ class WirelessCommunicationCluster:
         return info
 
     def change_obstacle_positions(self):
-        if 2000 < self.current_step <= 4000:
+        if 2000 == self.current_step:
             # Change obstacles to block Device 1 instead of Device 2 in all clusters
             # by rotating the obstacles around the center of their clusters
             new_obstacle_positions = []
@@ -864,18 +864,6 @@ class WirelessCommunicationCluster:
             ):
                 new_obstacle_positions.append(
                     rotate_points(obstacle_position, -90.0, AP_position)
-                )
-
-            self.obstacle_positions = np.array(new_obstacle_positions)
-
-        if 4000 < self.current_step <= 6000:
-            # Make obstacles block Device 2 again in all clusters
-            new_obstacle_positions = []
-            for obstacle_position, AP_position in zip(
-                self.obstacle_positions, self.AP_position
-            ):
-                new_obstacle_positions.append(
-                    rotate_points(obstacle_position, 90.0, AP_position)
                 )
 
             self.obstacle_positions = np.array(new_obstacle_positions)
