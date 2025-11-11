@@ -263,8 +263,8 @@ class Trainer:
             elif algorithm == Algorithm.RANDOM:
                 policy = Random(action_space)
             elif algorithm == Algorithm.DQN:
-                q_net = DQNQNetwork(obs_space, action_space, **self.model_config).to(
-                    self.device
+                q_net = DQNQNetwork(
+                    obs_space, action_space, **self.model_config, device=self.device
                 )
                 q_net_optim = Adam(q_net.parameters(), lr=self.SAC_config["lr"])
 
