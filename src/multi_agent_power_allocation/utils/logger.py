@@ -58,7 +58,9 @@ class Logger:
                 num_received_packet_acc,
             )
 
-            cluster_data.update({f"{prefix}/ Overall/ Interface Usage": fig})
+            cluster_data.update(
+                {f"{prefix}/ Overall/ Interface Usage": wandb.Plotly(fig)}
+            )
 
             log_data.update(cluster_data)
 
