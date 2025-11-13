@@ -601,10 +601,12 @@ class Algorithm(Enum):
             )
             # QoS satisfaction
             _state[:, 0] = (
-                wc_cluster.packet_loss_rate[:, 0] <= wc_cluster.qos_threshold
+                wc_cluster.packet_loss_rate_stacked.mean(axis=0)[:, 0]
+                <= wc_cluster.qos_threshold
             ).astype(float)
             _state[:, 1] = (
-                wc_cluster.packet_loss_rate[:, 1] <= wc_cluster.qos_threshold
+                wc_cluster.packet_loss_rate_stacked.mean(axis=0)[:, 1]
+                <= wc_cluster.qos_threshold
             ).astype(float)
             _state[:, 2] = wc_cluster.num_received_packet[:, 0].copy()
             _state[:, 3] = wc_cluster.num_received_packet[:, 1].copy()
@@ -714,9 +716,9 @@ class Algorithm(Enum):
         reward_power = -wc_cluster.num_devices * np.tanh(
             (target_power * (target_power.log() - predicted_power.log())).sum().item()
         )
-        reward_qos = (
-            (wc_cluster.current_step - 1) * prev_reward_qos + reward_qos
-        ) / wc_cluster.current_step
+        # reward_qos = (
+        #     (wc_cluster.current_step - 1) * prev_reward_qos + reward_qos
+        # ) / wc_cluster.current_step
 
         instance_reward = (
             reward_coef["reward_qos"] * reward_qos
