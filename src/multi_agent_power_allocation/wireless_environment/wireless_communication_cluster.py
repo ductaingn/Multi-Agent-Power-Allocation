@@ -867,6 +867,12 @@ class WirelessCommunicationCluster:
             info[f"{prefix}/ Device {k+1}/ Packet loss rate/ mmWave"] = (
                 self.packet_loss_rate[k, 1]
             )
+            info[f"{prefix}/ Device {k+1}/ Packet loss rate time window/ Sub6GHz"] = (
+                self.packet_loss_rate_stacked[:, k, 0].mean()
+            )
+            info[f"{prefix}/ Device {k+1}/ Packet loss rate time window/ mmWave"] = (
+                self.packet_loss_rate_stacked[:, k, 1].mean()
+            )
             info[f"{prefix}/ Device {k+1}/ Average rate/ Sub6GHz"] = self.average_rate[
                 k, 0
             ]

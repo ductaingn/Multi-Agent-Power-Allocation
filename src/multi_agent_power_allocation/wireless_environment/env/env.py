@@ -219,8 +219,11 @@ class WirelessEnvironment(ParallelEnv):
         wc_cluster = self.wc_clusters[agent]
 
         state = algorithm.get_state(wc_cluster)
+
         if np.isnan(state).any():
             raise ValueError(f"Env produced NaN state: {state}")
+
+        return state
 
     def get_observations(self) -> Dict[int, np.ndarray]:
         observations = {}
