@@ -10,8 +10,10 @@ import numpy as np
 
 import gymnasium as gym
 
-from multi_agent_power_allocation.utils.replay_buffer import ReplayBufferSamples
-from .base_algorithm import BaseAlgorithm, DummyActor
+from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
+    ReplayBufferSamples,
+)
+from . import LowLevelAlgorithm, DummyActor
 
 
 ln2 = np.log(2)
@@ -303,7 +305,7 @@ class AlphaTable(Table):
 
 
 @attrs.define
-class RAQL(BaseAlgorithm):
+class RAQL(LowLevelAlgorithm):
     action_space: gym.spaces.Space
     num_q_table: int = 4
     epsilon: float = 0.5
@@ -343,7 +345,7 @@ class RAQL(BaseAlgorithm):
 
         return unbatched_data
 
-    def get_actions(self, obs, **kwargs):
+    def inference(self, obs, **kwargs):
         unbatched_obs = self.unbatch_obs(obs)
         batched_actions = []
         for o in unbatched_obs:

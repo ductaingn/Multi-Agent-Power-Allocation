@@ -10,13 +10,17 @@ from torch.distributions import Independent, Normal
 
 import numpy as np
 
-from multi_agent_power_allocation.algorithms.base_algorithm import BaseAlgorithm
+from multi_agent_power_allocation.algorithms.low_level.low_level_algorithm import (
+    LowLevelAlgorithm,
+)
 from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic
-from multi_agent_power_allocation.utils.replay_buffer import ReplayBufferSamples
+from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
+    ReplayBufferSamples,
+)
 
 
 @attrs.define
-class SAC(BaseAlgorithm):
+class SAC(LowLevelAlgorithm):
     actor: SACPAACtor
     actor_optim: optim.Optimizer
     critic: SACPACritic
@@ -49,7 +53,7 @@ class SAC(BaseAlgorithm):
         self.critic.train(mode)
         self.critic2.train(mode)
 
-    def _get_actions(
+    def _inference_impl(
         self, obs, deterministic: bool = False, **kwargs
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         mu, std = self.actor(obs)
@@ -72,14 +76,14 @@ class SAC(BaseAlgorithm):
 
         return action, log_prob
 
-    def get_actions(self, obs, deterministic: bool = False, **kwargs) -> torch.Tensor:
-        action, _ = self._get_actions(obs, deterministic)
+    def inference(self, obs, deterministic: bool = False, **kwargs) -> torch.Tensor:
+        action, _ = self._inference_impl(obs, deterministic)
         return action
 
-    def get_actions_log_prob(
+    def _inference_log_prob(
         self, obs, deterministic: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        action, log_prob = self._get_actions(obs, deterministic)
+        action, log_prob = self._inference_impl(obs, deterministic)
 
         return action, log_prob
 
@@ -91,7 +95,7 @@ class SAC(BaseAlgorithm):
         optimizer: optim.Optimizer,
     ):
         with torch.no_grad():
-            next_actions, next_log_prob = self.get_actions_log_prob(
+            next_actions, next_log_prob = self._inference_log_prob(
                 data.next_observations, False
             )
             next_q_values = torch.cat(
@@ -137,7 +141,7 @@ class SAC(BaseAlgorithm):
         actor_losses, critic_losses, critic2_losses = [], [], []
 
         for gradient_step in range(self.gradient_steps):
-            actions, log_prob = self.get_actions_log_prob(data.observations, False)
+            actions, log_prob = self._inference_log_prob(data.observations, False)
 
             # Update entropy coefficient
             alpha_log_prob = log_prob.detach() + self.target_entropy

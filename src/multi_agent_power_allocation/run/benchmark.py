@@ -3,7 +3,7 @@ import argparse
 
 from multi_agent_power_allocation.utils.trainer import Trainer, parse_config
 from multi_agent_power_allocation import BASE_DIR
-from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
+from multi_agent_power_allocation.algorithms.algorithm_register import Algorithm
 
 
 def main():

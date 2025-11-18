@@ -1,7 +1,8 @@
 import os
 import argparse
 
-from multi_agent_power_allocation.utils.trainer import Trainer, parse_config
+from multi_agent_power_allocation.utils.trainer import Trainer
+from multi_agent_power_allocation.utils.train_config import TrainConfig
 from multi_agent_power_allocation import BASE_DIR
 
 
@@ -26,9 +27,17 @@ def main():
     args = arg_parser.parse_args()
 
     config_path = args.config_path
-    config: dict = parse_config(config_path)
+    config = TrainConfig(config_path)
 
-    trainer = Trainer(**config)
+    trainer = Trainer(
+        env_config=config.env_config,
+        model_config=config.model_config,
+        n_warm_up_step=config.n_warm_up_step,
+        wandb_config=config.wandb_config,
+        SAC_config=config.SAC_config,
+        device=config.device,
+        num_env=config.num_env,
+    )
 
     trainer.train(args.run_name)
 

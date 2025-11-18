@@ -4,19 +4,21 @@ import torch
 
 import gymnasium as gym
 
-from multi_agent_power_allocation.algorithms.base_algorithm import (
-    BaseAlgorithm,
+from multi_agent_power_allocation.algorithms.low_level.low_level_algorithm import (
+    LowLevelAlgorithm,
     DummyActor,
 )
-from multi_agent_power_allocation.utils.replay_buffer import ReplayBufferSamples
+from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
+    ReplayBufferSamples,
+)
 
 
 @attrs.define
-class Random(BaseAlgorithm):
+class Random(LowLevelAlgorithm):
     action_space: gym.spaces.Space
     actor: DummyActor = attrs.field(init=False, default=DummyActor())
 
-    def get_actions(self, obs, **kwargs):
+    def inference(self, obs, **kwargs):
         batch_size = obs.shape[0]
         return torch.rand((batch_size,) + self.action_space.shape)
 

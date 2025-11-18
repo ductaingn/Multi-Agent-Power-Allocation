@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Callable, Dict
+from typing import Callable
 
 import attrs
 
@@ -11,12 +11,14 @@ import numpy as np
 
 from gymnasium.spaces import Discrete
 
-from multi_agent_power_allocation.algorithms.base_algorithm import (
-    BaseAlgorithm,
+from multi_agent_power_allocation.algorithms.low_level.low_level_algorithm import (
+    LowLevelAlgorithm,
     DummyActor,
 )
 from multi_agent_power_allocation.nn.module import DQNQNetwork as QNetwork
-from multi_agent_power_allocation.utils.replay_buffer import ReplayBufferSamples
+from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
+    ReplayBufferSamples,
+)
 
 
 LAMBDA = 0.995  # Similar to RAQL
@@ -34,7 +36,7 @@ def get_exploration_schedule(_lambda: float = LAMBDA):
 
 
 @attrs.define
-class DQN(BaseAlgorithm):
+class DQN(LowLevelAlgorithm):
     q_net: QNetwork
     q_net_optim: optim.Optimizer
     action_space: Discrete
@@ -59,7 +61,7 @@ class DQN(BaseAlgorithm):
         self.q_net.train(mode)
         self.q_net_target.train(mode)
 
-    def get_actions(self, obs, deterministic: bool = False, **kwargs):
+    def inference(self, obs, deterministic: bool = False, **kwargs):
         if not deterministic and np.random.rand() < self.exploration_rate:
             actions = torch.tensor(
                 np.array([self.action_space.sample() for _ in range(obs.shape[0])])

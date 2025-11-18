@@ -24,7 +24,8 @@ from multi_agent_power_allocation.wireless_environment.utils import (
     rotate_points,
 )
 from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
-from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
+from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
+from multi_agent_power_allocation.algorithms.high_level import Reward
 
 
 @attrs.define(slots=False)
@@ -727,7 +728,7 @@ class WirelessCommunicationCluster:
 
         self.num_received_packet = np.minimum(self.num_send_packet, l_max, dtype=int)
 
-    def estimate_l_max(self, algorithm: "Algorithm"):
+    def estimate_l_max(self, algorithm: "Algorithms"):
         """
         Estimate the maximum number of packets that can be sent to each device based on the average rate and current QoS state of each device.
 
@@ -736,17 +737,29 @@ class WirelessCommunicationCluster:
         None
         """
         l = np.multiply(self.average_rate, self.T / self.D)
-        if algorithm == Algorithm.RAQL or algorithm == Algorithm.DQN:
+        if isinstance(algorithm, Algorithms.RAQL.value) or isinstance(
+            algorithm, Algorithms.DQN.value
+        ):
             l_max_estimate = np.floor(l)
         elif (
-            algorithm == Algorithm.SACPA
-            or algorithm == Algorithm.SACPF
-            or algorithm == Algorithm.RANDOM
+            isinstance(algorithm, Algorithms.SACPA.value)
+            or isinstance(algorithm, Algorithms.SACPF.value)
+            or isinstance(algorithm, Algorithms.RANDOM.value)
         ):
             packet_successful_rate = np.ones(
                 shape=(self.num_devices, 2)
             ) - self.packet_loss_rate_stacked.mean(axis=0)
             l_max_estimate = np.floor(l * packet_successful_rate)
+
+            # After a long time of not sending via one interface,
+            # the average rate drop so much that `l` becomes 0.0, eventhough the packet successful rate is 1.0
+            # This prevents under-use of interfaces and improve exploration of the policy
+            packet_successful_rate_warm_up_threshold = 1.0
+            l_max_estimate[
+                np.where(
+                    packet_successful_rate >= packet_successful_rate_warm_up_threshold
+                )
+            ] = 1
         else:
             raise NotImplementedError
 
@@ -792,13 +805,17 @@ class WirelessCommunicationCluster:
                     - 1
                 ) / (self.transmit_power[k, 1] * self.P_sum)
 
-    def get_info(self, reward: Dict[str, float]) -> Dict[str, float]:
+    def get_info(self, reward: Reward) -> Dict[str, float]:
         info = {}
         prefix = f"Agent {self.cluster_id}"
 
-        info[f"{prefix}/ Overall/ Reward"] = reward.get("instant_reward")
-        info[f"{prefix}/ Overall/ Reward QoS"] = reward.get("reward_qos")
-        info[f"{prefix}/ Overall/ Reward Power"] = reward.get("reward_power")
+        info[f"{prefix}/ Overall/ Reward"] = reward.reward_sum
+        info[f"{prefix}/ Overall/ Reward QoS"] = reward.reward_components.get(
+            "reward_qos"
+        )
+        info[f"{prefix}/ Overall/ Reward Power"] = reward.reward_components.get(
+            "reward_power"
+        )
         info[f"{prefix}/ Overall/ Sum Packet loss rate"] = self.sum_packet_loss_rate
         info[f"{prefix}/ Overall/ Average rate/ Sub6GHz"] = self.average_rate[
             :, 0
@@ -873,25 +890,23 @@ class WirelessCommunicationCluster:
 
         return info
 
-    def change_obstacle_positions(self):
-        if 2000 == self.current_step:
-            # Change obstacles to block Device 1 instead of Device 2 in all clusters
-            # by rotating the obstacles around the center of their clusters
-            new_obstacle_positions = []
-            for obstacle_position, AP_position in zip(
-                self.obstacle_positions, self.AP_position
-            ):
-                new_obstacle_positions.append(
-                    rotate_points(obstacle_position, -90.0, AP_position)
-                )
+    def change_obstacle_positions(self, AP_positions):
+        # Change obstacles to block Device 1 instead of Device 2 in all clusters
+        # by rotating the obstacles around the center of their clusters
+        new_obstacle_positions = []
+        for obstacle_position, AP_position in zip(
+            self.obstacle_positions, AP_positions
+        ):
+            new_obstacle_positions.append(
+                rotate_points(obstacle_position, -90.0, AP_position)
+            )
 
-            self.obstacle_positions = np.array(new_obstacle_positions)
+        self.obstacle_positions = np.array(new_obstacle_positions)
 
     def step(self):
         self.current_step += 1
         self.num_sent_packet_acc += self.num_send_packet
         self.num_received_packet_acc += self.num_received_packet
-        self.change_obstacle_positions()
 
     def reset(self):
         self.current_step = 1
