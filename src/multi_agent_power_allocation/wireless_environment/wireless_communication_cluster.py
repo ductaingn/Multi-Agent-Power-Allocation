@@ -759,7 +759,7 @@ class WirelessCommunicationCluster:
             indx = np.where(
                 packet_successful_rate >= packet_successful_rate_warm_up_threshold
             )
-            l_max_estimate[indx] = np.maximum(1, l_max_estimate[indx])
+            l_max_estimate[indx] = np.full_like(l_max_estimate[indx], self.L_max)
         else:
             raise NotImplementedError
 
