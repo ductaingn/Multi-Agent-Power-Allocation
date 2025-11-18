@@ -126,7 +126,6 @@ class MultiAgentTrainer:
             while self.num_timesteps < self.n_step_per_env:
                 infos = self.collect_data()
 
-                # TODO: test with vecenv
                 log_data = {"clusters_data": infos}
 
                 # TODO: check terminations conditions:

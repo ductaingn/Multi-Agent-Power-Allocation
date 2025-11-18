@@ -755,11 +755,10 @@ class WirelessCommunicationCluster:
             # the average rate drop so much that `l` becomes 0.0, eventhough the packet successful rate is 1.0
             # This prevents under-use of interfaces and improve exploration of the policy
             packet_successful_rate_warm_up_threshold = 1.0
-            l_max_estimate[
-                np.where(
-                    packet_successful_rate >= packet_successful_rate_warm_up_threshold
-                )
-            ] = 1
+            indx = np.where(
+                packet_successful_rate >= packet_successful_rate_warm_up_threshold
+            )
+            l_max_estimate[indx] = np.maximum(1, l_max_estimate[indx])
         else:
             raise NotImplementedError
 
