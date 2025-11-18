@@ -28,7 +28,7 @@ wandb_config:
 SAC_config:
   gamma: 0.99
   tau: 0.005
-  lr: 0.01
+  lr: 0.001
   train_batch_size_per_learner: 256
   num_epochs: 1
   minibatch_size: 256

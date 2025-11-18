@@ -16,5 +16,3 @@ if __name__ == "__main__":
     for frame in tqdm(range(1, 1 + 10000)):
         actions = {agent: env.action_space(agent).sample() for agent in env.agents}
         obs, rewards, terminated, truncated, infos = env.step(actions)
-        if frame > 197:
-            env.render()  # should pop up your matplotlib figure

@@ -702,13 +702,14 @@ class WirelessCommunicationCluster:
         self.sum_packet_loss_rate = sum_packet_loss_rate
 
     def update_packet_loss_rate_stacked(self):
-        packet_loss_rate_instant = 1 - np.nan_to_num(
-            self.num_received_packet / self.num_send_packet, nan=0.0
+        packet_loss_rate_instant = 1 - np.divide(
+            self.num_received_packet,
+            self.num_send_packet,
+            out=np.zeros_like(self.packet_loss_rate, dtype=self.packet_loss_rate.dtype),
+            where=self.num_send_packet > 0,
         )
-        self.packet_loss_rate_stacked[1:, :, :] = self.packet_loss_rate_stacked[
-            :-1, :, :
-        ]
-        self.packet_loss_rate_stacked[0] = packet_loss_rate_instant.copy()
+        self.packet_loss_rate_stacked[1:] = self.packet_loss_rate_stacked[:-1]
+        self.packet_loss_rate_stacked[0] = packet_loss_rate_instant
 
     def update_feedback(self, interference: np.ndarray):
         """
