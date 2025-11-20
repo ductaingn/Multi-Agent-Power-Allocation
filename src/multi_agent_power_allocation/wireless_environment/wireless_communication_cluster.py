@@ -174,7 +174,7 @@ class WirelessCommunicationCluster:
     packet_loss_rate: np.ndarray = attrs.field(init=False)
     global_packet_loss_rate: np.ndarray = attrs.field(init=False)
     sum_packet_loss_rate: float = attrs.field(init=False)
-    packet_loss_rate_time_window: int = attrs.field(init=False, default=10)
+    packet_loss_rate_time_window: int = attrs.field(default=10)
     packet_loss_rate_stacked: np.ndarray = attrs.field(
         init=False,
         metadata={
