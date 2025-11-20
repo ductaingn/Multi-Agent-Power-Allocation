@@ -126,8 +126,14 @@ class SACPA(Algorithm):
         ).astype(float)
         _state[:, 2] = wc_cluster.num_received_packet[:, 0].copy() / wc_cluster.L_max
         _state[:, 3] = wc_cluster.num_received_packet[:, 1].copy() / wc_cluster.L_max
-        _state[:, 4] = wc_cluster.average_rate[:, 0] / wc_cluster.maximum_rate[0]
-        _state[:, 5] = wc_cluster.average_rate[:, 1] / wc_cluster.maximum_rate[1]
+        _state[:, 4] = (
+            wc_cluster.average_rate_stacked.mean(axis=0)[:, 0]
+            / wc_cluster.maximum_rate[0]
+        )
+        _state[:, 5] = (
+            wc_cluster.average_rate_stacked.mean(axis=0)[:, 1]
+            / wc_cluster.maximum_rate[1]
+        )
         _state[:, 6] = wc_cluster.transmit_power[:, 0].copy() * 10.0  # Scale up
         _state[:, 7] = wc_cluster.transmit_power[:, 1].copy() * 10.0
         # TODO: Test with this state space

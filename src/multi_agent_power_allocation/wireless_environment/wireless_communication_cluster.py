@@ -181,6 +181,12 @@ class WirelessCommunicationCluster:
             "description": "instant packet loss rate of each device on each interface, stacked by `packet_loss_rate_time_window` time frames"
         },
     )
+    average_rate_stacked: np.ndarray = attrs.field(
+        init=False,
+        metadata={
+            "description": "instant rate of each device on each interface, stacked by `packet_loss_rate_time_window` time frames"
+        },
+    )
 
     estimated_ideal_power: np.ndarray = attrs.field(init=False)
     per_device_interference: np.ndarray = attrs.field(init=False)
@@ -243,6 +249,10 @@ class WirelessCommunicationCluster:
         self.average_rate = self._init_rate.copy()
         self.previous_rate = self._init_rate.copy()
         self.instant_rate = self._init_rate.copy()
+        self.average_rate_stacked = np.zeros(
+            shape=(self.packet_loss_rate_time_window, self.num_devices, 2)
+        )
+        self.average_rate_stacked[:, ...] = self._init_rate.copy()
 
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
         self.global_packet_loss_rate = np.zeros(shape=self.num_devices)
@@ -634,6 +644,10 @@ class WirelessCommunicationCluster:
 
         self.average_rate = average_rate
 
+    def update_average_rate_stacked(self):
+        self.average_rate_stacked[1:] = self.average_rate_stacked[:-1]
+        self.average_rate_stacked[0] = self.instant_rate
+
     def update_packet_loss_rate(self):
         """
         Updates packet loss rate on each interfaces, devices packet loss rate on the whole, and system packet loss rate
@@ -737,7 +751,7 @@ class WirelessCommunicationCluster:
         -------
         None
         """
-        l = np.multiply(self.average_rate, self.T / self.D)
+        l = np.multiply(self.average_rate_stacked.mean(axis=0), self.T / self.D)
         if isinstance(algorithm, Algorithms.RAQL.value) or isinstance(
             algorithm, Algorithms.DQN.value
         ):
@@ -879,6 +893,12 @@ class WirelessCommunicationCluster:
             info[f"{prefix}/ Device {k+1}/ Average rate/ mmWave"] = self.average_rate[
                 k, 1
             ]
+            info[f"{prefix}/ Device {k+1}/ Average rate time window/ Sub6GHz"] = (
+                self.average_rate_stacked[:, k, 0].mean()
+            )
+            info[f"{prefix}/ Device {k+1}/ Average rate time window/ mmWave"] = (
+                self.average_rate_stacked[:, k, 1].mean()
+            )
             info[f"{prefix}/ Device {k+1}/ Interference/ Sub6GHz"] = (
                 self.per_device_interference[k, 0]
             )
@@ -918,6 +938,8 @@ class WirelessCommunicationCluster:
         self.current_step = 1
         self.average_rate = self._init_rate.copy()
         self.instant_rate = self._init_rate.copy()
+        self.average_rate_stacked = np.zeros_like(self.average_rate_stacked)
+        self.average_rate_stacked[:, ...] = self._init_rate.copy()
         self.num_send_packet = self._init_num_send_packet
         self.num_sent_packet_acc = self._init_num_send_packet
         self.num_received_packet = self._init_num_received_packet

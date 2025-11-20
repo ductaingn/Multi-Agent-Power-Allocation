@@ -184,6 +184,7 @@ class WirelessEnvironment(ParallelEnv):
         wc_cluster.update_packet_loss_rate()
         wc_cluster.update_packet_loss_rate_stacked()
         wc_cluster.update_average_rate()
+        wc_cluster.update_average_rate_stacked()
 
     def get_feedbacks(self):
         """
