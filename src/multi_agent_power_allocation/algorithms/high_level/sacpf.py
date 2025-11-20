@@ -165,14 +165,14 @@ class SACPF(Algorithm):
                 wc_cluster.L_max,
             )
 
+            # Use time window packet loss rate
+            packet_loss_rate = wc_cluster.packet_loss_rate_stacked.mean(axis=0)
+
             for k in range(wc_cluster.num_devices):
                 if (
                     number_of_send_packet[k, 0] + number_of_send_packet[k, 1] == 0
                 ):  # Force to send at least one packet on more reliable channel
-                    if (
-                        wc_cluster.packet_loss_rate[k, 0]
-                        <= wc_cluster.packet_loss_rate[k, 1]
-                    ):
+                    if packet_loss_rate[k, 0] <= packet_loss_rate[k, 1]:
                         number_of_send_packet[k, 0] = 1
                     else:
                         number_of_send_packet[k, 1] = 1
@@ -183,11 +183,11 @@ class SACPF(Algorithm):
                 ):
                     # If the number of packets to send exceeds the maximum number of packets that can be sent
                     # then send on both channels by the proportion of the packet success rate
-                    if np.sum(wc_cluster.packet_loss_rate[k]) == 0:
+                    if np.sum(packet_loss_rate[k]) == 0:
                         psr_proportion = 0.5
                     else:
-                        psr_proportion = 1 - wc_cluster.packet_loss_rate[k, 0] / np.sum(
-                            wc_cluster.packet_loss_rate[k]
+                        psr_proportion = 1 - packet_loss_rate[k, 0] / np.sum(
+                            packet_loss_rate[k]
                         )
                     number_of_send_packet[k, 0] = np.floor(
                         psr_proportion * wc_cluster.L_max
