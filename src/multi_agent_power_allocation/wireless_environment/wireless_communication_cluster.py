@@ -705,7 +705,7 @@ class WirelessCommunicationCluster:
         packet_loss_rate_instant = 1 - np.divide(
             self.num_received_packet,
             self.num_send_packet,
-            out=np.zeros_like(self.packet_loss_rate, dtype=self.packet_loss_rate.dtype),
+            out=np.ones_like(self.packet_loss_rate, dtype=self.packet_loss_rate.dtype),
             where=self.num_send_packet > 0,
         )
         self.packet_loss_rate_stacked[1:] = self.packet_loss_rate_stacked[:-1]

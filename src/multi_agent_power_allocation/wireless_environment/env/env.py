@@ -292,7 +292,7 @@ class WirelessEnvironment(ParallelEnv):
         if self.current_step > self.max_num_step + 1:
             truncations = {agent: True for agent in self.agents}
 
-        if self.current_step == 200:
+        if self.current_step == 2000:
             AP_positions = [
                 wc_cluster.AP_position for wc_cluster in self.wc_clusters.values()
             ]
