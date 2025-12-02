@@ -19,23 +19,28 @@ class BackBone(nn.Module):
         self.state_dim = iot_device_state_dim
         self.latent_dim = latent_dim
 
-        self.embed = nn.Linear(iot_device_state_dim, 256)
+        self.embed = nn.Sequential(nn.Linear(iot_device_state_dim, 256), nn.GELU())
+        self.input_norm = nn.RMSNorm(256)
         self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(256, 4, 512, batch_first=True), num_layers=1
+            nn.TransformerEncoderLayer(
+                256, 4, 512, batch_first=True, activation=F.gelu
+            ),
+            norm=nn.RMSNorm(256),
+            num_layers=1,
         )
-        self.project = nn.Linear(256 * self.num_devices, latent_dim)
+        self.project = nn.Sequential(nn.Linear(256, latent_dim), nn.GELU())
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         batch_size = obs.shape[0]
         out = obs.reshape(batch_size, self.num_devices, self.state_dim)
 
         out = self.embed(out)
-        out = F.relu(out)
 
-        out = self.transformer(out)
-        out = out.reshape(batch_size, -1)  # Flatten the output
+        out = self.input_norm(out)
+        out: torch.Tensor = self.transformer(out)
+        out = out.mean(dim=1)
+
         out = self.project(out)
-        out = F.relu(out)
 
         return out
 
@@ -68,9 +73,9 @@ class SACPAACtor(nn.Module):
 
         self.latent_pi = nn.Sequential(
             nn.Linear(latent_dim, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, 256),
-            nn.ReLU(),
+            nn.GELU(),
         )
 
         # Build heads.
@@ -118,9 +123,9 @@ class SACPACritic(nn.Module):
 
         self.latent_q = nn.Sequential(
             nn.Linear(latent_dim + action_dim, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, 256),
-            nn.ReLU(),
+            nn.GELU(),
         )
 
         self.qf = nn.Linear(256, 1)
@@ -165,11 +170,11 @@ class DQNQNetwork(nn.Module):
 
         self.network = nn.Sequential(
             nn.Linear(iot_device_state_dim, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, action_dim),
         )
 

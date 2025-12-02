@@ -184,6 +184,7 @@ class WirelessEnvironment(ParallelEnv):
         wc_cluster.update_packet_loss_rate()
         wc_cluster.update_packet_loss_rate_stacked()
         wc_cluster.update_average_rate()
+        wc_cluster.update_average_rate_stacked()
 
     def get_feedbacks(self):
         """
@@ -218,7 +219,12 @@ class WirelessEnvironment(ParallelEnv):
         algorithm = self.algorithm_mapping[agent]
         wc_cluster = self.wc_clusters[agent]
 
-        return algorithm.get_state(wc_cluster)
+        state = algorithm.get_state(wc_cluster)
+
+        if np.isnan(state).any():
+            raise ValueError(f"Env produced NaN state: {state}")
+
+        return state
 
     def get_observations(self) -> Dict[int, np.ndarray]:
         observations = {}
@@ -287,7 +293,7 @@ class WirelessEnvironment(ParallelEnv):
         if self.current_step > self.max_num_step + 1:
             truncations = {agent: True for agent in self.agents}
 
-        if self.current_step == 200:
+        if self.current_step == 2000:
             AP_positions = [
                 wc_cluster.AP_position for wc_cluster in self.wc_clusters.values()
             ]

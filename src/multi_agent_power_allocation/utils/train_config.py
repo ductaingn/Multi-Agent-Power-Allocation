@@ -92,6 +92,9 @@ class TrainConfig:
                     "num_beam": wc_cluster_config["num_beam"],
                     "L_max": wc_cluster_config["L_max"],
                     "n_warm_up_step": config["n_warm_up_step"],
+                    "packet_loss_rate_time_window": wc_cluster_config[
+                        "packet_loss_rate_time_window"
+                    ],
                 }
             )
 

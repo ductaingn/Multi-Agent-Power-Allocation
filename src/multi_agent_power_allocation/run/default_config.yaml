@@ -15,6 +15,7 @@ env_config:
     num_sub_channel: 5
     num_beam: 5
     L_max: 10
+    packet_loss_rate_time_window: 100
 
 model_config:
   latent_dim: 256
@@ -28,7 +29,7 @@ wandb_config:
 SAC_config:
   gamma: 0.99
   tau: 0.005
-  lr: 0.01
+  lr: 0.001
   train_batch_size_per_learner: 256
   num_epochs: 1
   minibatch_size: 256

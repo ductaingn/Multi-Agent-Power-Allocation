@@ -124,10 +124,16 @@ class SACPA(Algorithm):
             wc_cluster.packet_loss_rate_stacked.mean(axis=0)[:, 1]
             <= wc_cluster.qos_threshold
         ).astype(float)
-        _state[:, 2] = wc_cluster.num_received_packet[:, 0].copy()
-        _state[:, 3] = wc_cluster.num_received_packet[:, 1].copy()
-        _state[:, 4] = wc_cluster.average_rate[:, 0] / wc_cluster.maximum_rate[0]
-        _state[:, 5] = wc_cluster.average_rate[:, 1] / wc_cluster.maximum_rate[1]
+        _state[:, 2] = wc_cluster.num_received_packet[:, 0].copy() / wc_cluster.L_max
+        _state[:, 3] = wc_cluster.num_received_packet[:, 1].copy() / wc_cluster.L_max
+        _state[:, 4] = (
+            wc_cluster.average_rate_stacked.mean(axis=0)[:, 0]
+            / wc_cluster.maximum_rate[0]
+        )
+        _state[:, 5] = (
+            wc_cluster.average_rate_stacked.mean(axis=0)[:, 1]
+            / wc_cluster.maximum_rate[1]
+        )
         _state[:, 6] = wc_cluster.transmit_power[:, 0].copy() * 10.0  # Scale up
         _state[:, 7] = wc_cluster.transmit_power[:, 1].copy() * 10.0
         # TODO: Test with this state space
@@ -169,14 +175,14 @@ class SACPA(Algorithm):
             power = torch.softmax(torch.tensor(power), dim=-1).numpy()
             power = power.reshape(wc_cluster.num_devices, 2)
 
+            # Use time window packet loss rate
+            packet_loss_rate = wc_cluster.packet_loss_rate_stacked.mean(axis=0)
+
             for k in range(wc_cluster.num_devices):
                 if (
                     number_of_send_packet[k, 0] + number_of_send_packet[k, 1] == 0
                 ):  # Force to send at least one packet on more reliable channel
-                    if (
-                        wc_cluster.packet_loss_rate[k, 0]
-                        <= wc_cluster.packet_loss_rate[k, 1]
-                    ):
+                    if packet_loss_rate[k, 0] <= packet_loss_rate[k, 1]:
                         number_of_send_packet[k, 0] = 1
                     else:
                         number_of_send_packet[k, 1] = 1
@@ -187,11 +193,11 @@ class SACPA(Algorithm):
                 ):
                     # If the number of packets to send exceeds the maximum number of packets that can be sent
                     # then send on both channels by the proportion of the packet success rate
-                    if np.sum(wc_cluster.packet_loss_rate[k]) == 0:
+                    if np.sum(packet_loss_rate[k]) == 0:
                         psr_proportion = 0.5
                     else:
-                        psr_proportion = 1 - wc_cluster.packet_loss_rate[k, 0] / np.sum(
-                            wc_cluster.packet_loss_rate[k]
+                        psr_proportion = 1 - packet_loss_rate[k, 0] / np.sum(
+                            packet_loss_rate[k]
                         )
                     number_of_send_packet[k, 0] = np.floor(
                         psr_proportion * wc_cluster.L_max
