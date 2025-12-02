@@ -19,23 +19,28 @@ class BackBone(nn.Module):
         self.state_dim = iot_device_state_dim
         self.latent_dim = latent_dim
 
-        self.embed = nn.Linear(iot_device_state_dim, 256)
+        self.embed = nn.Sequential(nn.Linear(iot_device_state_dim, 256), nn.GELU())
+        self.input_norm = nn.RMSNorm(256)
         self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(256, 4, 512, batch_first=True), num_layers=1
+            nn.TransformerEncoderLayer(
+                256, 4, 512, batch_first=True, activation=F.gelu
+            ),
+            norm=nn.RMSNorm(256),
+            num_layers=1,
         )
-        self.project = nn.Linear(256 * self.num_devices, latent_dim)
+        self.project = nn.Sequential(nn.Linear(256, latent_dim), nn.GELU())
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         batch_size = obs.shape[0]
         out = obs.reshape(batch_size, self.num_devices, self.state_dim)
 
         out = self.embed(out)
-        out = F.relu(out)
 
-        out = self.transformer(out)
-        out = out.reshape(batch_size, -1)  # Flatten the output
+        out = self.input_norm(out)
+        out: torch.Tensor = self.transformer(out)
+        out = out.mean(dim=1)
+
         out = self.project(out)
-        out = F.relu(out)
 
         return out
 
@@ -49,6 +54,7 @@ class SACPAACtor(nn.Module):
         num_devices,
         log_std_min=LOG_STD_MIN,
         log_std_max=LOG_STD_MAX,
+        device="cpu",
         *args,
         **kwargs,
     ):
@@ -67,18 +73,21 @@ class SACPAACtor(nn.Module):
 
         self.latent_pi = nn.Sequential(
             nn.Linear(latent_dim, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, 256),
-            nn.ReLU(),
+            nn.GELU(),
         )
 
         # Build heads.
         self.mu = nn.Linear(256, action_dim)
         self.log_std = nn.Linear(256, action_dim)
 
+        self.device = device
+        self.to(self.device)
+
     def forward(self, obs):
         if isinstance(obs, np.ndarray):
-            obs = torch.as_tensor(obs, dtype=torch.float32)
+            obs = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
         batch = obs.shape[0]
         features = self.features_extractor(obs.view(batch, -1))
         latent = self.latent_pi(features)
@@ -97,6 +106,7 @@ class SACPACritic(nn.Module):
         action_space: Space,
         latent_dim,
         num_devices,
+        device="cpu",
         *args,
         **kwargs,
     ):
@@ -113,18 +123,21 @@ class SACPACritic(nn.Module):
 
         self.latent_q = nn.Sequential(
             nn.Linear(latent_dim + action_dim, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, 256),
-            nn.ReLU(),
+            nn.GELU(),
         )
 
         self.qf = nn.Linear(256, 1)
 
+        self.device = device
+        self.to(self.device)
+
     def forward(self, obs, act):
         if isinstance(obs, np.ndarray):
-            obs = torch.as_tensor(obs, dtype=torch.float32)
+            obs = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
         if isinstance(act, np.ndarray):
-            act = torch.as_tensor(act, dtype=torch.float32)
+            act = torch.as_tensor(act, dtype=torch.float32, device=self.device)
 
         batch = obs.shape[0]
         features = self.features_extractor(obs.view(batch, -1))
@@ -141,6 +154,7 @@ class DQNQNetwork(nn.Module):
         action_space: Discrete,
         latent_dim,
         num_devices,
+        device="cpu",
         *args,
         **kwargs,
     ):
@@ -156,16 +170,21 @@ class DQNQNetwork(nn.Module):
 
         self.network = nn.Sequential(
             nn.Linear(iot_device_state_dim, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, 256),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(256, action_dim),
         )
 
+        self.device = device
+        self.to(self.device)
+
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
-        obs = obs.float()
+        if isinstance(obs, np.ndarray):
+            obs = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
+        obs = obs.float().to(self.device)
         action = self.network(obs)
 
         return action

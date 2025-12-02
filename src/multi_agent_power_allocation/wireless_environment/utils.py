@@ -395,3 +395,33 @@ def segments_intersect(s1, s2) -> bool:
         return True
 
     return False
+
+
+def rotate_points(points, angle_degrees, origin=(0, 0)):
+    """
+    Rotate 2D points around a given origin by a specified angle.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        Array of shape (N, 2) containing the points to rotate.
+    angle_degrees : float
+        Rotation angle in degrees (counterclockwise).
+    origin : tuple[float, float]
+        The (x, y) coordinates of the rotation origin.
+
+    Returns
+    -------
+    np.ndarray
+        Rotated points with the same shape as input.
+    """
+    angle_radians = np.radians(angle_degrees)
+    rotation_matrix = np.array(
+        [
+            [np.cos(angle_radians), -np.sin(angle_radians)],
+            [np.sin(angle_radians), np.cos(angle_radians)],
+        ]
+    )
+
+    origin = np.array(origin)
+    return (points - origin) @ rotation_matrix.T + origin

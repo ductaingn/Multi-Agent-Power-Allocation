@@ -17,7 +17,6 @@ wandb = "0.19.11"
 torchvision = {version = "0.21.0", source = "torch-cpu"}
 torchaudio = {version = "2.6.0", source = "torch-cpu"}
 pettingzoo = "^1.25.0"
-supersuit = "^3.10.0"
 tqdm = "^4.67.1"
 rich = "^14.1.0"
 matplotlib = "^3.10.6"

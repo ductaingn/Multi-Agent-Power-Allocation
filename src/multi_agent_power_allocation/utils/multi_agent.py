@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import Dict
 
 import attrs
 from rich.progress import (
@@ -16,23 +16,18 @@ import numpy as np
 
 from ..wireless_environment.env.wrapper import SyncVecEnv
 from .logger import Logger
-from ..algorithms.base_algorithm import BaseAlgorithm
-from .replay_buffer import ReplayBuffer, ReplayBufferSamples
+from ..algorithms.high_level import Algorithm
+from ..algorithms.low_level.utils.replay_buffer import ReplayBuffer, ReplayBufferSamples
 
 
 @attrs.define
 class MultiAgentPolicyManager:
-    policies: List[BaseAlgorithm]
+    policies: Dict[str, Algorithm]
     envs: SyncVecEnv
-    agent_ids: List[str] = attrs.field(init=False)
-
-    @agent_ids.default
-    def agent_ids_factory(self):
-        return [f"{i}" for i in range(len(self.policies))]
 
     def learn(self, data: Dict[str, ReplayBufferSamples]):
         res = {}
-        for agent_id, policy in zip(self.agent_ids, self.policies):
+        for agent_id, policy in self.policies.items():
             agent_data = data[agent_id]
             actor_loss, critic_loss, critic2_loss, alpha_loss, alpha = policy.learn(
                 agent_data
@@ -53,23 +48,13 @@ class MultiAgentPolicyManager:
 @attrs.define
 class MultiAgentTrainer:
     multi_agent_manager: MultiAgentPolicyManager
-    replay_buffer_list: List[ReplayBuffer]
+    replay_buffer: Dict[str, ReplayBuffer] = attrs.field()
     n_step_per_env: int
     batch_size: int
     logger: Logger
     learning_start: int = 200
-    replay_buffer: Dict[str, ReplayBuffer] = attrs.field(init=False)
     num_timesteps: int = attrs.field(default=0, init=False)
     _last_obs: Dict[str, torch.Tensor] = attrs.field(init=False)
-
-    @replay_buffer.default
-    def _replay_buffer_factory(self):
-        return {
-            agent_id: buf
-            for agent_id, buf in zip(
-                self.multi_agent_manager.agent_ids, self.replay_buffer_list
-            )
-        }
 
     @_last_obs.default
     def _last_obs_factory(self):
@@ -79,20 +64,18 @@ class MultiAgentTrainer:
     def collect_data(self):
         # Sample action
         actions = {}
-        for agent_id, policy in zip(
-            self.multi_agent_manager.agent_ids, self.multi_agent_manager.policies
-        ):
-            policy.actor.train(False)
+        for agent_id, policy in self.multi_agent_manager.policies.items():
+            policy.low_level_algorithm.actor.train(False)
 
             if self.num_timesteps < self.learning_start:
                 agent_actions = np.array(
                     [self.multi_agent_manager.envs.action_spaces[agent_id].sample()]
                 )
             else:
-                agent_actions = policy.get_actions(
+                agent_actions = policy.low_level_algorithm.inference(
                     self._last_obs[agent_id], deterministic=False
                 )
-                agent_actions = agent_actions.detach().numpy()
+                agent_actions = agent_actions.detach().cpu().numpy()
 
             actions.update({agent_id: agent_actions})
 
@@ -102,7 +85,7 @@ class MultiAgentTrainer:
 
         # TODO: check terminations conditions
         # Update replay buffer
-        for agent_id in self.multi_agent_manager.agent_ids:
+        for agent_id in self.multi_agent_manager.policies.keys():
             self.replay_buffer[agent_id].add(
                 self._last_obs[agent_id],
                 next_observations[agent_id],
@@ -117,7 +100,7 @@ class MultiAgentTrainer:
     def sample_data(self):
         data = {
             agent_id: self.replay_buffer[agent_id].sample(self.batch_size)
-            for agent_id in self.multi_agent_manager.agent_ids
+            for agent_id in self.multi_agent_manager.policies.keys()
         }
 
         return data
@@ -143,7 +126,6 @@ class MultiAgentTrainer:
             while self.num_timesteps < self.n_step_per_env:
                 infos = self.collect_data()
 
-                # TODO: test with vecenv
                 log_data = {"clusters_data": infos}
 
                 # TODO: check terminations conditions:

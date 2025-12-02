@@ -21,9 +21,11 @@ from multi_agent_power_allocation.wireless_environment.utils import (
     compute_h_mW,
     generate_h_tilde,
     segments_intersect,
+    rotate_points,
 )
 from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
-from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
+from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
+from multi_agent_power_allocation.algorithms.high_level import Reward
 
 
 @attrs.define(slots=False)
@@ -172,6 +174,19 @@ class WirelessCommunicationCluster:
     packet_loss_rate: np.ndarray = attrs.field(init=False)
     global_packet_loss_rate: np.ndarray = attrs.field(init=False)
     sum_packet_loss_rate: float = attrs.field(init=False)
+    packet_loss_rate_time_window: int = attrs.field(default=10)
+    packet_loss_rate_stacked: np.ndarray = attrs.field(
+        init=False,
+        metadata={
+            "description": "instant packet loss rate of each device on each interface, stacked by `packet_loss_rate_time_window` time frames"
+        },
+    )
+    average_rate_stacked: np.ndarray = attrs.field(
+        init=False,
+        metadata={
+            "description": "instant rate of each device on each interface, stacked by `packet_loss_rate_time_window` time frames"
+        },
+    )
 
     estimated_ideal_power: np.ndarray = attrs.field(init=False)
     per_device_interference: np.ndarray = attrs.field(init=False)
@@ -234,10 +249,17 @@ class WirelessCommunicationCluster:
         self.average_rate = self._init_rate.copy()
         self.previous_rate = self._init_rate.copy()
         self.instant_rate = self._init_rate.copy()
+        self.average_rate_stacked = np.zeros(
+            shape=(self.packet_loss_rate_time_window, self.num_devices, 2)
+        )
+        self.average_rate_stacked[:, ...] = self._init_rate.copy()
 
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
         self.global_packet_loss_rate = np.zeros(shape=self.num_devices)
         self.sum_packet_loss_rate = 0
+        self.packet_loss_rate_stacked = np.zeros(
+            shape=(self.packet_loss_rate_time_window, self.num_devices, 2)
+        )
 
         self.maximum_rate: np.ndarray = np.array(
             [
@@ -416,10 +438,10 @@ class WirelessCommunicationCluster:
         )
         cls.generate_postitions(scenario_name, num_cluster, num_device)
 
-    def set_num_send_packet(self, num_send_packet: np.ndarray) -> None:
+    def set_num_send_packet(self, num_send_packet: np.ndarray):
         self.num_send_packet = num_send_packet.copy()
 
-    def set_transmit_power(self, transmit_power: np.ndarray) -> None:
+    def set_transmit_power(self, transmit_power: np.ndarray):
         self.transmit_power = transmit_power.copy()
 
     def update_allocation(self, init: bool = False) -> Union[None, np.ndarray]:
@@ -606,7 +628,7 @@ class WirelessCommunicationCluster:
         if init:
             return rate
 
-    def update_average_rate(self) -> None:
+    def update_average_rate(self):
         """
         Update the average rate for each device based on the current step and previous average rate.
 
@@ -622,7 +644,11 @@ class WirelessCommunicationCluster:
 
         self.average_rate = average_rate
 
-    def update_packet_loss_rate(self) -> None:
+    def update_average_rate_stacked(self):
+        self.average_rate_stacked[1:] = self.average_rate_stacked[:-1]
+        self.average_rate_stacked[0] = self.instant_rate
+
+    def update_packet_loss_rate(self):
         """
         Updates packet loss rate on each interfaces, devices packet loss rate on the whole, and system packet loss rate
         """
@@ -689,7 +715,17 @@ class WirelessCommunicationCluster:
         self.global_packet_loss_rate = global_packet_loss_rate
         self.sum_packet_loss_rate = sum_packet_loss_rate
 
-    def update_feedback(self, interference: np.ndarray) -> None:
+    def update_packet_loss_rate_stacked(self):
+        packet_loss_rate_instant = 1 - np.divide(
+            self.num_received_packet,
+            self.num_send_packet,
+            out=np.ones_like(self.packet_loss_rate, dtype=self.packet_loss_rate.dtype),
+            where=self.num_send_packet > 0,
+        )
+        self.packet_loss_rate_stacked[1:] = self.packet_loss_rate_stacked[:-1]
+        self.packet_loss_rate_stacked[0] = packet_loss_rate_instant
+
+    def update_feedback(self, interference: np.ndarray):
         """
         Update the number of received packet at device side
 
@@ -707,7 +743,7 @@ class WirelessCommunicationCluster:
 
         self.num_received_packet = np.minimum(self.num_send_packet, l_max, dtype=int)
 
-    def estimate_l_max(self, algorithm: "Algorithm") -> None:
+    def estimate_l_max(self, algorithm: "Algorithms"):
         """
         Estimate the maximum number of packets that can be sent to each device based on the average rate and current QoS state of each device.
 
@@ -715,18 +751,29 @@ class WirelessCommunicationCluster:
         -------
         None
         """
-        l = np.multiply(self.average_rate, self.T / self.D)
-        if algorithm == Algorithm.RAQL or algorithm == Algorithm.DQN:
+        l = np.multiply(self.average_rate_stacked.mean(axis=0), self.T / self.D)
+        if isinstance(algorithm, Algorithms.RAQL.value) or isinstance(
+            algorithm, Algorithms.DQN.value
+        ):
             l_max_estimate = np.floor(l)
         elif (
-            algorithm == Algorithm.SACPA
-            or algorithm == Algorithm.SACPF
-            or algorithm == Algorithm.RANDOM
+            isinstance(algorithm, Algorithms.SACPA.value)
+            or isinstance(algorithm, Algorithms.SACPF.value)
+            or isinstance(algorithm, Algorithms.RANDOM.value)
         ):
-            packet_successful_rate = (
-                np.ones(shape=(self.num_devices, 2)) - self.packet_loss_rate
-            )
+            packet_successful_rate = np.ones(
+                shape=(self.num_devices, 2)
+            ) - self.packet_loss_rate_stacked.mean(axis=0)
             l_max_estimate = np.floor(l * packet_successful_rate)
+
+            # After a long time of not sending via one interface,
+            # the average rate drop so much that `l` becomes 0.0, eventhough the packet successful rate is 1.0
+            # This prevents under-use of interfaces and improve exploration of the policy
+            packet_successful_rate_warm_up_threshold = 1.0
+            indx = np.where(
+                packet_successful_rate >= packet_successful_rate_warm_up_threshold
+            )
+            l_max_estimate[indx] = np.full_like(l_max_estimate[indx], self.L_max)
         else:
             raise NotImplementedError
 
@@ -745,7 +792,8 @@ class WirelessCommunicationCluster:
         #             device_position=self.device_positions[k], device_index=k,
         #             h_tilde=self.h_tilde[self.current_step, 1, k, mW_beam_index])
 
-        self.estimated_channel_power
+        # self.estimated_channel_power
+        ...
 
     def estimate_CGINR(self):
         """
@@ -771,13 +819,17 @@ class WirelessCommunicationCluster:
                     - 1
                 ) / (self.transmit_power[k, 1] * self.P_sum)
 
-    def get_info(self, reward: Dict[str, float]) -> Dict[str, float]:
+    def get_info(self, reward: Reward) -> Dict[str, float]:
         info = {}
         prefix = f"Agent {self.cluster_id}"
 
-        info[f"{prefix}/ Overall/ Reward"] = reward.get("instant_reward")
-        info[f"{prefix}/ Overall/ Reward QoS"] = reward.get("reward_qos")
-        info[f"{prefix}/ Overall/ Reward Power"] = reward.get("reward_power")
+        info[f"{prefix}/ Overall/ Reward"] = reward.reward_sum
+        info[f"{prefix}/ Overall/ Reward QoS"] = reward.reward_components.get(
+            "reward_qos"
+        )
+        info[f"{prefix}/ Overall/ Reward Power"] = reward.reward_components.get(
+            "reward_power"
+        )
         info[f"{prefix}/ Overall/ Sum Packet loss rate"] = self.sum_packet_loss_rate
         info[f"{prefix}/ Overall/ Average rate/ Sub6GHz"] = self.average_rate[
             :, 0
@@ -829,12 +881,24 @@ class WirelessCommunicationCluster:
             info[f"{prefix}/ Device {k+1}/ Packet loss rate/ mmWave"] = (
                 self.packet_loss_rate[k, 1]
             )
+            info[f"{prefix}/ Device {k+1}/ Packet loss rate time window/ Sub6GHz"] = (
+                self.packet_loss_rate_stacked[:, k, 0].mean()
+            )
+            info[f"{prefix}/ Device {k+1}/ Packet loss rate time window/ mmWave"] = (
+                self.packet_loss_rate_stacked[:, k, 1].mean()
+            )
             info[f"{prefix}/ Device {k+1}/ Average rate/ Sub6GHz"] = self.average_rate[
                 k, 0
             ]
             info[f"{prefix}/ Device {k+1}/ Average rate/ mmWave"] = self.average_rate[
                 k, 1
             ]
+            info[f"{prefix}/ Device {k+1}/ Average rate time window/ Sub6GHz"] = (
+                self.average_rate_stacked[:, k, 0].mean()
+            )
+            info[f"{prefix}/ Device {k+1}/ Average rate time window/ mmWave"] = (
+                self.average_rate_stacked[:, k, 1].mean()
+            )
             info[f"{prefix}/ Device {k+1}/ Interference/ Sub6GHz"] = (
                 self.per_device_interference[k, 0]
             )
@@ -852,6 +916,19 @@ class WirelessCommunicationCluster:
 
         return info
 
+    def change_obstacle_positions(self, AP_positions):
+        # Change obstacles to block Device 1 instead of Device 2 in all clusters
+        # by rotating the obstacles around the center of their clusters
+        new_obstacle_positions = []
+        for obstacle_position, AP_position in zip(
+            self.obstacle_positions, AP_positions
+        ):
+            new_obstacle_positions.append(
+                rotate_points(obstacle_position, -90.0, AP_position)
+            )
+
+        self.obstacle_positions = np.array(new_obstacle_positions)
+
     def step(self):
         self.current_step += 1
         self.num_sent_packet_acc += self.num_send_packet
@@ -861,6 +938,8 @@ class WirelessCommunicationCluster:
         self.current_step = 1
         self.average_rate = self._init_rate.copy()
         self.instant_rate = self._init_rate.copy()
+        self.average_rate_stacked = np.zeros_like(self.average_rate_stacked)
+        self.average_rate_stacked[:, ...] = self._init_rate.copy()
         self.num_send_packet = self._init_num_send_packet
         self.num_sent_packet_acc = self._init_num_send_packet
         self.num_received_packet = self._init_num_received_packet
@@ -869,3 +948,6 @@ class WirelessCommunicationCluster:
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
         self.global_packet_loss_rate = np.zeros(shape=(self.num_devices))
         self.sum_packet_loss_rate = 0
+        self.packet_loss_rate_stacked = np.zeros(
+            shape=(self.packet_loss_rate_time_window, self.num_devices, 2)
+        )

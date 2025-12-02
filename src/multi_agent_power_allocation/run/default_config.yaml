@@ -1,5 +1,5 @@
 env_config:
-  algorithm_list: ["DQN", "DQN", "DQN", "DQN"] #Literal["SACPA, SACPF, RAQL, Random, DQN"]
+  algorithm_list: ["SACPA", "SACPA", "SACPA", "SACPA"] #Literal["SACPA, SACPF, RAQL, Random, DQN"]
   # render_mode: "human"
   num_cluster: 4
   max_num_step: 10000
@@ -14,6 +14,8 @@ env_config:
     num_devices: 3
     num_sub_channel: 5
     num_beam: 5
+    L_max: 10
+    packet_loss_rate_time_window: 100
 
 model_config:
   latent_dim: 256
@@ -27,7 +29,7 @@ wandb_config:
 SAC_config:
   gamma: 0.99
   tau: 0.005
-  lr: 0.01
+  lr: 0.001
   train_batch_size_per_learner: 256
   num_epochs: 1
   minibatch_size: 256

@@ -146,10 +146,17 @@ def plot_positions(ax: Axes, positions: List[Dict], colors: Colormap) -> None:
 
 if __name__ == "__main__":
     import json
+    from multi_agent_power_allocation.wireless_environment.utils import rotate_points
 
     scenario = "scenario_4"
     data_path = os.path.join(BASE_DIR, "data", scenario)
-    cluster_folders = sorted(os.listdir(data_path))
+    cluster_folders = sorted(
+        [
+            name
+            for name in os.listdir(data_path)
+            if os.path.isdir(os.path.join(data_path, name))
+        ]
+    )
     print(cluster_folders)
 
     positions: List[Dict] = []
@@ -166,5 +173,17 @@ if __name__ == "__main__":
     cmap = plt.get_cmap("tab10")
     colors = [cmap(i) for i in range(len(positions))]  # first two: blue and orange
     print(colors)
+    # plot_positions(ax, positions, colors=colors)
+    # plt.show()
+
+    for position in positions:
+        position["obstacles"][0] = rotate_points(
+            position["obstacles"][0], -90, position["AP"]
+        )
+
+    for position in positions:
+        position["obstacles"][0] = rotate_points(
+            position["obstacles"][0], 90, position["AP"]
+        )
     plot_positions(ax, positions, colors=colors)
     plt.show()

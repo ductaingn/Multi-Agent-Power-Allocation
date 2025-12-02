@@ -18,7 +18,8 @@ from multi_agent_power_allocation.wireless_environment.wireless_communication_cl
     compute_h_sub,
 )
 from multi_agent_power_allocation.utils.plot import plot_positions
-from multi_agent_power_allocation.algorithms.base_algorithm import Algorithm
+from multi_agent_power_allocation.algorithms.high_level import Algorithm, Reward
+from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
 
 
 @attrs.define
@@ -35,7 +36,7 @@ class WirelessEnvironment(ParallelEnv):
         "is_parallelizable": True,
     }
 
-    algorithm_list: List[Algorithm]
+    algorithm_mapping: Dict[str, Algorithm]  # {cluster_id: Algorithm}
     reward_coef: Dict[str, float]
     wc_clusters_configs: List[Dict[str, Any]]
     n_warm_up_step: int = attrs.field()
@@ -50,7 +51,6 @@ class WirelessEnvironment(ParallelEnv):
     wc_clusters: Dict[str, WirelessCommunicationCluster] = attrs.field(
         default={}, init=False
     )
-    algorithm_mapping: Dict[str, Algorithm] = attrs.field(init=False)
     reward_qos: Dict[str, float] = attrs.field(init=False)
 
     def __attrs_post_init__(self):
@@ -59,12 +59,8 @@ class WirelessEnvironment(ParallelEnv):
             torch.manual_seed(self.seed)
             random.seed(self.seed)
 
-        self.agents: List[str] = [str(i) for i in range(self.num_cluster)]
+        self.agents = list(self.algorithm_mapping.keys())
         self.possible_agents = self.agents[:]
-        self.algorithm_mapping = {
-            agent: algorithm
-            for agent, algorithm in zip(self.agents, self.algorithm_list)
-        }
         self.reward_qos = {agent: 0.0 for agent in self.agents}
 
         for i in range(self.num_cluster):
@@ -77,7 +73,7 @@ class WirelessEnvironment(ParallelEnv):
                     {
                         "LOS_PATH_LOSS": np.random.normal(
                             0, 5.8, size=(self.max_num_step + 1, num_devices)
-                        )
+                        )  # TODO: different seed for different cluster
                     }
                 )
                 self.wc_clusters_configs[i].update(
@@ -97,9 +93,8 @@ class WirelessEnvironment(ParallelEnv):
             )
 
     def reset(self, seed=None, options=None):
-        for wcc_agent in self.wc_clusters:
-            wcc_agent: str
-            self.wc_clusters[wcc_agent].reset()
+        for wc_cluster in self.wc_clusters.values():
+            wc_cluster.reset()
 
         observations = self.get_observations()
         infos = {agent: {} for agent in self.agents}
@@ -148,7 +143,6 @@ class WirelessEnvironment(ParallelEnv):
 
             if other_agent != agent:
                 other_wcc = self.wc_clusters[other_agent]
-                other_wcc_id = other_wcc.cluster_id
 
                 for other_device, allocation in enumerate(other_wcc.allocation):
                     subchannel, _ = allocation
@@ -188,7 +182,9 @@ class WirelessEnvironment(ParallelEnv):
 
         wc_cluster.update_feedback(interference=interference)
         wc_cluster.update_packet_loss_rate()
+        wc_cluster.update_packet_loss_rate_stacked()
         wc_cluster.update_average_rate()
+        wc_cluster.update_average_rate_stacked()
 
     def get_feedbacks(self):
         """
@@ -198,7 +194,7 @@ class WirelessEnvironment(ParallelEnv):
         for agent in self.agents:
             self._update_feedback(agent)
 
-    def _compute_rewards(self, agent: str) -> Dict[str, float]:
+    def _compute_rewards(self, agent: str) -> Reward:
         algorithm = self.algorithm_mapping[agent]
         wc_cluster = self.wc_clusters[agent]
 
@@ -206,11 +202,11 @@ class WirelessEnvironment(ParallelEnv):
             wc_cluster, self.reward_qos[agent], self.reward_coef
         )
 
-        self.reward_qos[agent] = rewards["reward_qos"]
+        self.reward_qos[agent] = rewards.reward_components["reward_qos"]
 
         return rewards
 
-    def get_rewards(self) -> Dict[int, Dict[str, float]]:
+    def get_rewards(self) -> Dict[int, Reward]:
         rewards = {}
         for agent in self.agents:
             agent: str
@@ -223,7 +219,12 @@ class WirelessEnvironment(ParallelEnv):
         algorithm = self.algorithm_mapping[agent]
         wc_cluster = self.wc_clusters[agent]
 
-        return algorithm.get_state(wc_cluster)
+        state = algorithm.get_state(wc_cluster)
+
+        if np.isnan(state).any():
+            raise ValueError(f"Env produced NaN state: {state}")
+
+        return state
 
     def get_observations(self) -> Dict[int, np.ndarray]:
         observations = {}
@@ -259,7 +260,7 @@ class WirelessEnvironment(ParallelEnv):
     def estimate_CGINR(self):
         for agent in self.agents:
             algorithm = self.algorithm_mapping[agent]
-            if algorithm == Algorithm.SACPA:
+            if isinstance(algorithm, Algorithms.SACPA.value):
                 self.wc_clusters[agent].estimate_CGINR()
 
     def step(self, actions: torch.Tensor | np.ndarray):
@@ -278,13 +279,11 @@ class WirelessEnvironment(ParallelEnv):
         self.get_feedbacks()
         self.estimate_CGINR()
 
-        for wc_cluster in self.wc_clusters:
-            self.wc_clusters[wc_cluster].step()
+        for wc_cluster in self.wc_clusters.values():
+            wc_cluster.step()
 
         _rewards = self.get_rewards()
-        rewards = {
-            agent: _rewards.get(agent).get("instant_reward") for agent in _rewards
-        }
+        rewards = {agent: _rewards.get(agent).reward_sum for agent in _rewards}
 
         observations = self.get_observations()
 
@@ -293,6 +292,13 @@ class WirelessEnvironment(ParallelEnv):
         self.current_step += 1
         if self.current_step > self.max_num_step + 1:
             truncations = {agent: True for agent in self.agents}
+
+        if self.current_step == 2000:
+            AP_positions = [
+                wc_cluster.AP_position for wc_cluster in self.wc_clusters.values()
+            ]
+            for wc_cluster in self.wc_clusters.values():
+                wc_cluster.change_obstacle_positions(AP_positions)
 
         return observations, rewards, terminations, truncations, infos
 
@@ -305,8 +311,7 @@ class WirelessEnvironment(ParallelEnv):
     def action_space(self, agent):
         algorithm = self.algorithm_mapping[agent]
         num_devices = self.wc_clusters[agent].num_devices
-        L_max = self.wc_clusters[agent].L_max
-        return algorithm.action_space(num_devices, L_max)
+        return algorithm.action_space(num_devices)
 
     def render(self):
         mode = self.render_mode
