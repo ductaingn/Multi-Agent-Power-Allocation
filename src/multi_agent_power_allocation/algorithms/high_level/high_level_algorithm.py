@@ -59,8 +59,72 @@ class Algorithm(ABC):
     ):
         raise NotImplementedError
 
+    def compute_channel_allocation(  # pylint: disable=W0221
+        self, wc_cluster: "WirelessCommunicationCluster"
+    ):
+        """
+        Allocate subchannels and beams to devices randomly based on the number of packets to be sent.
+
+        Parameters
+        ----------
+        num_send_packet : np.ndarray
+            Array of shape (num_devices, 2) representing the number of packets to be sent to each device.
+
+        Returns
+        -------
+        None
+        """
+        sub = []  # Stores index of subchannel device will allocate
+        mW = []  # Stores index of beam device will allocate
+        for i in range(wc_cluster.num_devices):
+            sub.append(-1)
+            mW.append(-1)
+
+        rand_sub = []
+        rand_mW = []
+        for i in range(wc_cluster.num_sub_channel):
+            rand_sub.append(i)
+        for i in range(wc_cluster.num_beam):
+            rand_mW.append(i)
+
+        for k in range(wc_cluster.num_devices):
+            if (
+                wc_cluster.num_send_packet[k, 0] > 0
+                and wc_cluster.num_send_packet[k, 1] == 0
+            ):
+                rand_index = int(np.random.randint(0, len(rand_sub)))
+                sub[k] = rand_sub[rand_index]
+                rand_sub.pop(rand_index)
+            elif (
+                wc_cluster.num_send_packet[k, 0] == 0
+                and wc_cluster.num_send_packet[k, 1] > 0
+            ):
+                rand_index = int(np.random.randint(0, len(rand_mW)))
+                mW[k] = rand_mW[rand_index]
+                rand_mW.pop(rand_index)
+            else:
+                rand_sub_index = int(np.random.randint(0, len(rand_sub)))
+                rand_mW_index = int(np.random.randint(0, len(rand_mW)))
+
+                sub[k] = rand_sub[rand_sub_index]
+                mW[k] = rand_mW[rand_mW_index]
+
+                rand_sub.pop(rand_sub_index)
+                rand_mW.pop(rand_mW_index)
+
+        allocation = np.array([sub, mW], dtype=int).transpose()
+        wc_cluster.set_channel_allocation(allocation)
+
     @abstractmethod
     def compute_reward(
         self, wc_cluster: "WirelessCommunicationCluster", *args, **kwargs
     ) -> Reward:
         raise NotImplementedError
+
+    def update_environment_info(
+        self, wc_cluster: "WirelessCommunicationCluster", *args, **kwargs
+    ):
+        """
+        Update information after applying action and taking feedbacks
+        """
+        pass

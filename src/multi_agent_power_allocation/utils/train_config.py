@@ -92,9 +92,6 @@ class TrainConfig:
                     "num_beam": wc_cluster_config["num_beam"],
                     "L_max": wc_cluster_config["L_max"],
                     "n_warm_up_step": config["n_warm_up_step"],
-                    "packet_loss_rate_time_window": wc_cluster_config[
-                        "packet_loss_rate_time_window"
-                    ],
                 }
             )
 
@@ -201,7 +198,7 @@ class TrainConfig:
                 # ]
 
                 policy = algorithm_cls.value(
-                    SAC(
+                    low_level_algorithm=SAC(
                         actor,
                         actor_optim,
                         critic1,
@@ -211,12 +208,20 @@ class TrainConfig:
                         target_entropy,
                         log_alpha,
                         alpha_optim,
-                    )
+                    ),
+                    num_devices=env_config["wc_clusters_configs"][agent_id][
+                        "num_devices"
+                    ],
                 )
             elif algorithm_cls == Algorithms.RAQL:
                 policy = algorithm_cls.value(RAQL(action_space))
             elif algorithm_cls == Algorithms.RANDOM:
-                policy = algorithm_cls.value(Random(action_space))
+                policy = algorithm_cls.value(
+                    low_level_algorithm=Random(action_space),
+                    num_devices=env_config["wc_clusters_configs"][agent_id][
+                        "num_devices"
+                    ],
+                )
             elif algorithm_cls == Algorithms.DQN:
                 q_net = DQNQNetwork(
                     obs_space, action_space, **self.model_config, device=self.device
