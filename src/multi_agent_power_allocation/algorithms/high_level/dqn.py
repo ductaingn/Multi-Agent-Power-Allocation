@@ -107,6 +107,19 @@ class DQN(Algorithm):
 
         return _state
 
+    def estimate_l_max(self, wc_cluster: "WirelessCommunicationCluster"):
+        """
+        Estimate the maximum number of packets that can be sent to each device based on the average rate and current QoS state of each device.
+
+        Returns
+        -------
+        None
+        """
+        l = np.multiply(wc_cluster.average_rate, wc_cluster.T / wc_cluster.D)
+        estimated_l_max = np.floor(l)
+
+        return estimated_l_max
+
     def compute_number_send_packet_and_power(
         self,
         wc_cluster: "WirelessCommunicationCluster",
@@ -122,6 +135,8 @@ class DQN(Algorithm):
                 wc_cluster.num_send_packet, wc_cluster.L_max
             )
         else:
+            estimated_l_max = self.estimate_l_max(wc_cluster)
+
             number_of_send_packet = np.zeros(
                 shape=(wc_cluster.num_devices, 2), dtype=int
             )
@@ -131,21 +146,19 @@ class DQN(Algorithm):
             for k in range(wc_cluster.num_devices):
                 if interfaces[k] == 0:
                     number_of_send_packet[k, 0] = max(
-                        1, min(wc_cluster.l_max_estimate[k, 0], wc_cluster.L_max)
+                        1, min(estimated_l_max[k, 0], wc_cluster.L_max)
                     )
 
                 if interfaces[k] == 1:
                     number_of_send_packet[k, 1] = max(
-                        1, min(wc_cluster.l_max_estimate[k, 1], wc_cluster.L_max)
+                        1, min(estimated_l_max[k, 1], wc_cluster.L_max)
                     )
 
                 if interfaces[k] == 2:
-                    if wc_cluster.l_max_estimate[k, 1] < wc_cluster.L_max:
-                        number_of_send_packet[k, 1] = max(
-                            1, wc_cluster.l_max_estimate[k, 1]
-                        )
+                    if estimated_l_max[k, 1] < wc_cluster.L_max:
+                        number_of_send_packet[k, 1] = max(1, estimated_l_max[k, 1])
                         number_of_send_packet[k, 0] = min(
-                            max(1, wc_cluster.l_max_estimate[k, 0]),
+                            max(1, estimated_l_max[k, 0]),
                             wc_cluster.L_max - number_of_send_packet[k, 1],
                         )
                     else:
@@ -157,6 +170,11 @@ class DQN(Algorithm):
                     power[k, 0] = 0
                 if number_of_send_packet[k, 1] == 0:
                     power[k, 1] = 0
+
+        assert np.all(
+            number_of_send_packet.sum(axis=1) > 0
+        ), "AP must send packet to every IoT devices"
+        assert np.all(power.sum(axis=1) > 0), "AP must send packet to every IoT devices"
 
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)

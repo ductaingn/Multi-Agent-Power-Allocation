@@ -177,5 +177,10 @@ class SACPF(SACPA):
                     power[k, 0] += power[k, 1]
                     power[k, 1] = 0
 
+        assert np.all(
+            number_of_send_packet.sum(axis=1) > 0
+        ), "AP must send packet to every IoT devices"
+        assert np.all(power.sum(axis=1) > 0), "AP must send packet to every IoT devices"
+
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)

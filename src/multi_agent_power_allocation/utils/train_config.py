@@ -146,13 +146,12 @@ class TrainConfig:
         # schedulers = []
 
         for agent_id, algorithm_cls in enumerate(list_algorithm_cls):
+            num_iot_devices = env_config["wc_clusters_configs"][agent_id]["num_devices"]
             obs_space = algorithm_cls.value.observation_space(
-                env_config["wc_clusters_configs"][agent_id]["num_devices"],
+                num_iot_devices,
                 env_config["wc_clusters_configs"][agent_id]["L_max"],
             )
-            action_space = algorithm_cls.value.action_space(
-                env_config["wc_clusters_configs"][agent_id]["num_devices"]
-            )
+            action_space = algorithm_cls.value.action_space(num_iot_devices)
 
             if algorithm_cls == Algorithms.SACPA or algorithm_cls == Algorithms.SACPF:
                 actor = SACPAACtor(
@@ -209,18 +208,14 @@ class TrainConfig:
                         log_alpha,
                         alpha_optim,
                     ),
-                    num_devices=env_config["wc_clusters_configs"][agent_id][
-                        "num_devices"
-                    ],
+                    num_devices=num_iot_devices,
                 )
             elif algorithm_cls == Algorithms.RAQL:
                 policy = algorithm_cls.value(RAQL(action_space))
             elif algorithm_cls == Algorithms.RANDOM:
                 policy = algorithm_cls.value(
                     low_level_algorithm=Random(action_space),
-                    num_devices=env_config["wc_clusters_configs"][agent_id][
-                        "num_devices"
-                    ],
+                    num_iot_devices=num_iot_devices,
                 )
             elif algorithm_cls == Algorithms.DQN:
                 q_net = DQNQNetwork(
@@ -228,7 +223,10 @@ class TrainConfig:
                 )
                 q_net_optim = Adam(q_net.parameters(), lr=self.SAC_config["lr"])
 
-                policy = algorithm_cls.value(DQN(q_net, q_net_optim, action_space))
+                policy = algorithm_cls.value(
+                    low_level_algorithm=DQN(q_net, q_net_optim, action_space),
+                    num_iot_devices=num_iot_devices,
+                )
             else:
                 raise NotImplementedError
 

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 @attrs.define
 class SACPA(Algorithm):
     low_level_algorithm: SAC
-    num_devices: int = attrs.field(
+    num_iot_devices: int = attrs.field(
         metadata={"description": "Number of IoT device in cluster"}
     )
     environment_info_time_window: int = attrs.field(default=100)
@@ -43,11 +43,15 @@ class SACPA(Algorithm):
 
     @packet_loss_rate_stacked.default
     def _packet_loss_rate_stacked_factory(self):
-        return np.zeros(shape=(self.environment_info_time_window, self.num_devices, 2))
+        return np.zeros(
+            shape=(self.environment_info_time_window, self.num_iot_devices, 2)
+        )
 
     @average_rate_stacked.default
     def _average_rate_stacked_factory(self):
-        return np.zeros(shape=(self.environment_info_time_window, self.num_devices, 2))
+        return np.zeros(
+            shape=(self.environment_info_time_window, self.num_iot_devices, 2)
+        )
 
     @classmethod
     def observation_space(  # pylint: disable=W0221
@@ -291,6 +295,11 @@ class SACPA(Algorithm):
                 if number_of_send_packet[k, 1] == 0:
                     power[k, 0] += power[k, 1]
                     power[k, 1] = 0
+
+        assert np.all(
+            number_of_send_packet.sum(axis=1) > 0
+        ), "AP must send packet to every IoT devices"
+        assert np.all(power.sum(axis=1) > 0), "AP must send packet to every IoT devices"
 
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)

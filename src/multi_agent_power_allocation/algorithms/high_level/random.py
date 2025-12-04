@@ -62,5 +62,10 @@ class Random(SACPA):
                         wc_cluster.L_max - number_of_send_packet[k, 0]
                     )
 
+        assert np.all(
+            number_of_send_packet.sum(axis=1) > 0
+        ), "AP must send packet to every IoT devices"
+        assert np.all(power.sum(axis=1) > 0), "AP must send packet to every IoT devices"
+
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)
