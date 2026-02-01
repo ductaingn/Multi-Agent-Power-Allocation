@@ -6,6 +6,9 @@ authors = ["Nguyen Duc Tai <ductaingn.015203@gmail.com>"]
 readme = "README.md"
 packages = [{ include = "multi_agent_power_allocation", from = "src" }]
 
+[tool.poetry.excludes]
+"src/data/*" = true
+
 [tool.poetry.dependencies]
 python = "3.11.13"
 attrs = "25.3.0"
