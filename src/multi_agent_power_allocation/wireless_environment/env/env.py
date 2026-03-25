@@ -19,7 +19,6 @@ from multi_agent_power_allocation.wireless_environment.wireless_communication_cl
 )
 from multi_agent_power_allocation.utils.plot import plot_positions
 from multi_agent_power_allocation.algorithms.high_level import Algorithm, Reward
-from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
 
 
 @attrs.define
@@ -100,28 +99,18 @@ class WirelessEnvironment(ParallelEnv):
         infos = {agent: {} for agent in self.agents}
         return observations, infos
 
-    def compute_number_send_packet_and_power(
-        self,
-        agent: str,
-        policy_network_output: torch.Tensor,
-    ) -> None:
-        wc_cluster = self.wc_clusters[agent]
-        algorithm = self.algorithm_mapping[agent]
-
-        algorithm.compute_number_send_packet_and_power(
-            wc_cluster, policy_network_output
-        )
-
     def _compute_action(self, agent: str, policy_network_output):
         """
         Compute action for one agent
+
+        Determine the number of send packet, transmit power, and channel for each IoT device
         """
         wc_cluster = self.wc_clusters[agent]
         algorithm = self.algorithm_mapping[agent]
-        wc_cluster.estimate_l_max(algorithm)
-        self.compute_number_send_packet_and_power(agent, policy_network_output)
-        wc_cluster.update_allocation()
-        wc_cluster.update_signal_power()  # Must be updated after allocation
+        algorithm.compute_number_send_packet_and_power(
+            wc_cluster, policy_network_output
+        )
+        algorithm.compute_channel_allocation(wc_cluster)
 
     def compute_actions(self, policy_outputs):
         """
@@ -181,10 +170,6 @@ class WirelessEnvironment(ParallelEnv):
                             )
 
         wc_cluster.update_feedback(interference=interference)
-        wc_cluster.update_packet_loss_rate()
-        wc_cluster.update_packet_loss_rate_stacked()
-        wc_cluster.update_average_rate()
-        wc_cluster.update_average_rate_stacked()
 
     def get_feedbacks(self):
         """
@@ -193,6 +178,13 @@ class WirelessEnvironment(ParallelEnv):
         """
         for agent in self.agents:
             self._update_feedback(agent)
+
+    def update_environment_info(self):
+        for agent in self.agents:
+            algorithm = self.algorithm_mapping[agent]
+            wc_cluster = self.wc_clusters[agent]
+
+            algorithm.update_environment_info(wc_cluster)
 
     def _compute_rewards(self, agent: str) -> Reward:
         algorithm = self.algorithm_mapping[agent]
@@ -257,12 +249,6 @@ class WirelessEnvironment(ParallelEnv):
 
         return np.array(states)
 
-    def estimate_CGINR(self):
-        for agent in self.agents:
-            algorithm = self.algorithm_mapping[agent]
-            if isinstance(algorithm, Algorithms.SACPA.value):
-                self.wc_clusters[agent].estimate_CGINR()
-
     def step(self, actions: torch.Tensor | np.ndarray):
         """
         Parameters
@@ -277,7 +263,7 @@ class WirelessEnvironment(ParallelEnv):
 
         self.compute_actions(policy_outputs=actions)
         self.get_feedbacks()
-        self.estimate_CGINR()
+        self.update_environment_info()
 
         for wc_cluster in self.wc_clusters.values():
             wc_cluster.step()

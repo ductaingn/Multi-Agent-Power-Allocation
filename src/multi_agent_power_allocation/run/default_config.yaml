@@ -1,5 +1,5 @@
 env_config:
-  algorithm_list: ["SACPA", "SACPA", "SACPA", "SACPA"] #Literal["SACPA, SACPF, RAQL, Random, DQN"]
+  algorithm_list: ["DQN", "DQN", "DQN", "DQN"] #Literal["SACPA, SACPF, RAQL, Random, DQN"]
   # render_mode: "human"
   num_cluster: 4
   max_num_step: 10000
@@ -15,7 +15,6 @@ env_config:
     num_sub_channel: 5
     num_beam: 5
     L_max: 10
-    packet_loss_rate_time_window: 100
 
 model_config:
   latent_dim: 256
