@@ -6,7 +6,7 @@ import numpy as np
 
 import torch
 
-from gymnasium.spaces import Space, Box
+from gymnasium.spaces import Space, Box, Discrete, MultiDiscrete
 
 from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm import (
     Algorithm,
@@ -69,24 +69,13 @@ class RAQL(Algorithm):
         Flattened
         """
         return Box(
-            low=np.array(
-                [
-                    np.zeros((num_iot_devices)),
-                    np.zeros((num_iot_devices)),
-                    np.zeros((num_iot_devices)),
-                    np.zeros((num_iot_devices)),
-                ],
-                dtype=np.float32,
-            ).flatten(),
-            high=np.array(
-                [
-                    np.ones((num_iot_devices)),
-                    np.ones((num_iot_devices)),
-                    np.ones((num_iot_devices)),
-                    np.ones((num_iot_devices)),
-                ],
-                dtype=np.float32,
-            ).flatten(),
+            low=np.array([
+                np.zeros(shape=(num_iot_devices), dtype=int),
+            ]).flatten(),
+            high=np.array([
+                np.full(shape=(num_iot_devices), fill_value=2, dtype=int),
+            ]).flatten(),
+            dtype=int
         )
 
     def get_state(self, wc_cluster: "WirelessCommunicationCluster") -> np.ndarray:
@@ -153,6 +142,8 @@ class RAQL(Algorithm):
                     else:
                         number_of_send_packet[k, 0] = 1
                         number_of_send_packet[k, 1] = wc_cluster.L_max - 1
+
+                assert number_of_send_packet[k, 0] + number_of_send_packet[k, 1] > 0
 
                 # For analysing purpose other channel
                 if number_of_send_packet[k, 0] == 0:
