@@ -135,7 +135,7 @@ class Table:
         preview = entries[:5]
         repr_str = "\n".join(f"{s} | {a} → {q:.2f}" for s, a, q in preview)
         if len(entries) > 5:
-            repr_str += f"\n... and {len(entries)-5} more entries"
+            repr_str += f"\n... and {len(entries) - 5} more entries"
         return repr_str or "Table(empty)"
 
 
@@ -341,7 +341,14 @@ class RAQL(LowLevelAlgorithm):
         for obs, next_obs, act, rew in zip(
             data.observations, data.next_observations, data.actions, data.rewards
         ):
-            unbatched_data.append([obs, next_obs, act, rew])
+            unbatched_data.append(
+                [
+                    obs.detach().cpu().numpy(),
+                    next_obs.detach().cpu().numpy(),
+                    act.detach().cpu().numpy(),
+                    rew.detach().cpu().numpy(),
+                ]
+            )
 
         return unbatched_data
 
@@ -422,4 +429,4 @@ class RAQL(LowLevelAlgorithm):
 
                     self.Q_tables[i].update(obs, act, q_update_value)
 
-        return [0.0] * 5
+        return (0.0, 0.0, 0.0, 0.0, 0.0)
