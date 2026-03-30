@@ -210,6 +210,7 @@ class SACPF(Algorithm):
     def compute_reward(  # pylint: disable=W0221
         self,
         wc_cluster: "WirelessCommunicationCluster",
+        prev_reward_qos: float,
         reward_coef: Dict[str, float],
     ) -> Reward:
         def estimate_ideal_power(num_send_packet, CGINR, W):
