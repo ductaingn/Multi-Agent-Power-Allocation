@@ -108,7 +108,7 @@ class WirelessCommunicationCluster:
         default=8000, metadata={"description": "Size of one packet in bit."}
     )
 
-    T: int = attrs.field(
+    T: float = attrs.field(
         default=1e-3, metadata={"description": "Time duration of one step in seconds."}
     )
 
@@ -140,6 +140,8 @@ class WirelessCommunicationCluster:
         default=pow(10, -169 / 10) * 1e-3,
         metadata={"description": "Noise power at device sides (-169 dBm/Hz)."},
     )
+
+    rng: np.random.Generator | None = attrs.field(default=None)
 
     W_sub: float = attrs.field(init=False)
     W_mw: float = attrs.field(init=False)
@@ -474,16 +476,26 @@ class WirelessCommunicationCluster:
 
         for k in range(self.num_devices):
             if self.num_send_packet[k, 0] > 0 and self.num_send_packet[k, 1] == 0:
-                rand_index = int(np.random.randint(0, len(rand_sub)))
+                if self.rng is None:
+                    rand_index = int(np.random.randint(0, len(rand_sub)))
+                else:
+                    rand_index = int(self.rng.integers(0, len(rand_sub)))
                 sub[k] = rand_sub[rand_index]
                 rand_sub.pop(rand_index)
             elif self.num_send_packet[k, 0] == 0 and self.num_send_packet[k, 1] > 0:
-                rand_index = int(np.random.randint(0, len(rand_mW)))
+                if self.rng is None:
+                    rand_index = int(np.random.randint(0, len(rand_mW)))
+                else:
+                    rand_index = int(self.rng.integers(0, len(rand_mW)))
                 mW[k] = rand_mW[rand_index]
                 rand_mW.pop(rand_index)
             else:
-                rand_sub_index = int(np.random.randint(0, len(rand_sub)))
-                rand_mW_index = int(np.random.randint(0, len(rand_mW)))
+                if self.rng is None:
+                    rand_sub_index = int(np.random.randint(0, len(rand_sub)))
+                    rand_mW_index = int(np.random.randint(0, len(rand_mW)))
+                else:
+                    rand_sub_index = int(self.rng.integers(0, len(rand_sub)))
+                    rand_mW_index = int(self.rng.integers(0, len(rand_mW)))
 
                 sub[k] = rand_sub[rand_sub_index]
                 mW[k] = rand_mW[rand_mW_index]

@@ -23,11 +23,13 @@ if TYPE_CHECKING:
 @attrs.define
 class DQN(Algorithm):
     low_level_algorithm: LLDQN
-    num_iot_devices: int
+    num_iot_devices: int = attrs.field(init=False)
     interface_hash_map: Dict[int, np.ndarray] = attrs.field(init=False)
 
-    @interface_hash_map.default
-    def _interface_hash_map_factory(self):
+    def __attrs_post_init__(self):
+        self.num_iot_devices = int(
+            np.log(self.low_level_algorithm.action_space.n) / np.log(3)
+        )
         grids = np.meshgrid(*[np.arange(3)] * self.num_iot_devices, indexing="ij")
         states = (
             np.stack(grids, axis=0).reshape(self.num_iot_devices, -1).T
@@ -37,7 +39,7 @@ class DQN(Algorithm):
         values = states[:, ::-1].copy()
         hash_map = {i: values[i] for i in range(values.shape[0])}
 
-        return hash_map
+        self.interface_hash_map = hash_map
 
     @classmethod
     def observation_space(  # pylint: disable=W0221

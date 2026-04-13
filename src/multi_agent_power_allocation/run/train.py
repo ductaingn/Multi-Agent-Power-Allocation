@@ -1,8 +1,10 @@
 import os
 import argparse
+import yaml
 
 from multi_agent_power_allocation.utils.trainer import Trainer
 from multi_agent_power_allocation.utils.train_config import TrainConfig
+from multi_agent_power_allocation.utils.seed import create_generator, set_seed
 from multi_agent_power_allocation import BASE_DIR
 
 
@@ -27,7 +29,22 @@ def main():
     args = arg_parser.parse_args()
 
     config_path = args.config_path
-    config = TrainConfig(config_path)
+    
+    # Create RNG generator early
+    # Load seed from config
+    with open(config_path, "rb") as f:
+        raw_config = yaml.safe_load(f)
+        seed = raw_config.get("env_config", {}).get("seed")
+    
+    # Set non-numpy seeds
+    if seed is not None:
+        set_seed(seed)
+        rng = create_generator(seed)
+    else:
+        rng = None
+    
+    # Pass generator to TrainConfig
+    config = TrainConfig(config_path, rng=rng)
 
     trainer = Trainer(
         env_config=config.env_config,

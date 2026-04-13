@@ -291,7 +291,7 @@ def signal_power(p: float, h: float) -> float:
 
 def gamma(
     w: float, s: float, interference: float, noise: float
-) -> Union[float, list[float, float]]:
+) -> float:
     """
     Calculate the signal-to-noise ratio (SNR).
 
@@ -305,8 +305,6 @@ def gamma(
         Interference from other devices.
     noise : float
         Noise power.
-    return_power : bool
-        Indicate whether to return power or not.
 
     Returns
     -------

@@ -23,4 +23,4 @@ class Random(LowLevelAlgorithm):
         return torch.rand((batch_size,) + self.action_space.shape)
 
     def learn(self, data: ReplayBufferSamples):
-        return [0.0] * 5
+        return (0.0, 0.0, 0.0, 0.0, 0.0)

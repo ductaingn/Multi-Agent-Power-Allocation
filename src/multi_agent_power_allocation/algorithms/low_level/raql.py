@@ -142,7 +142,7 @@ class Table:
 @attrs.define
 class QTable(Table):
     best_action_cache: Dict = attrs.field(
-        init=False, default=dict()
+        init=False, factory=dict
     )  # Cache: state -> best_action
 
     def update(self, state, action, value):
@@ -307,6 +307,7 @@ class AlphaTable(Table):
 @attrs.define
 class RAQL(LowLevelAlgorithm):
     action_space: gym.spaces.Space
+    rng: np.random.Generator | None = attrs.field(default=None, kw_only=True)
     num_q_table: int = 4
     epsilon: float = 0.5
     gamma: float = 0.9
@@ -355,13 +356,21 @@ class RAQL(LowLevelAlgorithm):
     def inference(self, obs, **kwargs):
         unbatched_obs = self.unbatch_obs(obs)
         batched_actions = []
+        
         for o in unbatched_obs:
             state = tuple(o.flatten().tolist())
-            H = np.random.randint(0, self.num_q_table)
+            
+            # Use Generator if available, otherwise fall back to global numpy RNG
+            if self.rng is None:
+                H = np.random.randint(0, self.num_q_table)
+                p = np.random.rand()
+            else:
+                H = self.rng.integers(0, self.num_q_table)
+                p = self.rng.random()
+            
             Q_random = self.Q_tables[H]
             self.epsilon = self.epsilon * self.lambda_
 
-            p = np.random.rand()
             if p < self.epsilon:
                 action = self.action_space.sample()
                 action = tuple(action.flatten().tolist())
@@ -408,7 +417,12 @@ class RAQL(LowLevelAlgorithm):
             next_obs = tuple(next_obs.flatten().tolist())
             act = tuple(act.flatten().tolist())
 
-            J = np.random.poisson(1, self.num_q_table)
+            # Use Generator if available, otherwise fall back to global numpy RNG
+            if self.rng is None:
+                J = np.random.poisson(1, self.num_q_table)
+            else:
+                J = self.rng.poisson(1, self.num_q_table)
+            
             for i in range(self.num_q_table):
                 if J[i] == 1:
                     self.V_tables[i].update(obs, act)

@@ -62,7 +62,7 @@ class DQN(LowLevelAlgorithm):
         self.q_net_target.train(mode)
 
     def inference(self, obs, deterministic: bool = False, **kwargs):
-        if not deterministic and np.random.rand() < self.exploration_rate:
+        if not deterministic and torch.rand(1).cpu().item() < self.exploration_rate:
             actions = torch.tensor(
                 np.array([self.action_space.sample() for _ in range(obs.shape[0])])
             )

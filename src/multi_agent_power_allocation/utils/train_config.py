@@ -29,6 +29,7 @@ from multi_agent_power_allocation.algorithms.high_level import Algorithm
 @attrs.define
 class TrainConfig:
     config_file_path: str
+    rng: np.random.Generator | None = attrs.field(default=None, kw_only=True)
     model_config: Dict = attrs.field(init=False)
     env_config: Dict = attrs.field(init=False)
     num_cluster: int = attrs.field(init=False)
@@ -37,6 +38,7 @@ class TrainConfig:
     wandb_config: Dict = attrs.field(init=False)
     SAC_config: Dict = attrs.field(init=False)
     device: str = attrs.field(init=False)
+    seed: int | None = attrs.field(init=False)
 
     def __attrs_post_init__(self):
         try:
@@ -137,10 +139,13 @@ class TrainConfig:
         self.SAC_config = config.get("SAC_config")
         self.n_warm_up_step = config.get("n_warm_up_step")
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.seed = env_config.get("seed", None)
 
         algorithm_mapping = self.get_algorithm_mapping(env_config)
         env_config.pop("algorithm_list")
         env_config.update({"algorithm_mapping": algorithm_mapping})
+        # Pass the Generator to the environment
+        env_config.update({"rng": self.rng})
         self.env_config = env_config
 
     def get_algorithm_mapping(self, env_config: Dict) -> Dict[str, Algorithm]:
@@ -156,6 +161,8 @@ class TrainConfig:
             action_space = algorithm_cls.value.action_space(
                 env_config["wc_clusters_configs"][agent_id]["num_devices"]
             )
+            if self.seed is not None:
+                action_space.seed(self.seed + agent_id)
 
             if algorithm_cls == Algorithms.SACPA or algorithm_cls == Algorithms.SACPF:
                 actor = SACPAACtor(
@@ -214,7 +221,11 @@ class TrainConfig:
                     )
                 )
             elif algorithm_cls == Algorithms.RAQL:
-                policy = algorithm_cls.value(RAQL(action_space))
+                if self.rng is not None:
+                    rng = np.random.default_rng(self.rng.integers(0, 2**31))
+                else:
+                    rng = None
+                policy = algorithm_cls.value(RAQL(action_space, rng=rng))
             elif algorithm_cls == Algorithms.RANDOM:
                 policy = algorithm_cls.value(Random(action_space))
             elif algorithm_cls == Algorithms.DQN:

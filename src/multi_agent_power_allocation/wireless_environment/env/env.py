@@ -20,6 +20,7 @@ from multi_agent_power_allocation.wireless_environment.wireless_communication_cl
 from multi_agent_power_allocation.utils.plot import plot_positions
 from multi_agent_power_allocation.algorithms.high_level import Algorithm, Reward
 from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
+from multi_agent_power_allocation.wireless_environment.constants import _initialize_path_loss_constants, NUM_OF_FRAME
 
 
 @attrs.define
@@ -44,6 +45,7 @@ class WirelessEnvironment(ParallelEnv):
     max_num_step: int = attrs.field(default=10_000)
     current_step: int = attrs.field(default=1)
     seed: int = attrs.field(default=None)
+    rng: np.random.Generator = attrs.field(default=None, kw_only=True)
     render_mode: str = attrs.field(default=None)
     window: Surface = attrs.field(default=None, init=False)
     clock: pygame.time.Clock = attrs.field(default=None, init=False)
@@ -54,40 +56,34 @@ class WirelessEnvironment(ParallelEnv):
     reward_qos: Dict[str, float] = attrs.field(init=False)
 
     def __attrs_post_init__(self):
-        if self.seed:
-            np.random.seed(self.seed)
-            torch.manual_seed(self.seed)
-            random.seed(self.seed)
-
         self.agents = list(self.algorithm_mapping.keys())
         self.possible_agents = self.agents[:]
         self.reward_qos = {agent: 0.0 for agent in self.agents}
-
+        
         for i in range(self.num_cluster):
             if not (
                 self.wc_clusters_configs[i].get("LOS_PATH_LOSS")
                 and self.wc_clusters_configs[i].get("NLOS_PATH_LOSS")
             ):
-                num_devices = self.wc_clusters_configs[i].get("num_devices")
-                self.wc_clusters_configs[i].update(
-                    {
-                        "LOS_PATH_LOSS": np.random.normal(
-                            0, 5.8, size=(self.max_num_step + 1, num_devices)
-                        )  # TODO: different seed for different cluster
-                    }
+                num_devices: int = self.wc_clusters_configs[i]["num_devices"]
+                los, nlos = _initialize_path_loss_constants(
+                    self.max_num_step, 
+                    num_devices, 
+                    self.rng
                 )
-                self.wc_clusters_configs[i].update(
-                    {
-                        "NLOS_PATH_LOSS": np.random.normal(
-                            0, 8.7, size=(self.max_num_step + 1, num_devices)
-                        )
-                    }
-                )
+                
+                self.wc_clusters_configs[i].update({"LOS_PATH_LOSS": los})
+                self.wc_clusters_configs[i].update({"NLOS_PATH_LOSS": nlos})
+
+            if self.seed is None:
+                wcc_rng = None
+            else:
+                wcc_rng = np.random.default_rng(i)
 
             self.wc_clusters.update(
                 {
                     self.agents[i]: WirelessCommunicationCluster(
-                        cluster_id=i, **self.wc_clusters_configs[i]
+                        cluster_id=i, rng=wcc_rng, **self.wc_clusters_configs[i]
                     )
                 }
             )
@@ -152,16 +148,16 @@ class WirelessEnvironment(ParallelEnv):
                             wc_cluster.allocation[:, 0] == subchannel
                         )  # find which device of wc_cluster use this sub channel
                         if device_indice[0].size > 0:  # found
-                            assert (
-                                device_indice[0].size <= 1
-                            ), f"There are more than one device using sub-channel {subchannel}! Devices: {device_indice}."
+                            assert device_indice[0].size <= 1, (
+                                f"There are more than one device using sub-channel {subchannel}! Devices: {device_indice}."
+                            )
                             device = device_indice[0][0]
 
                             interference_h = compute_h_sub(
                                 distance_to_AP=np.linalg.norm(
                                     wc_cluster.device_positions[device]
                                     - other_wcc.AP_position
-                                ),
+                                ).item(),
                                 h_tilde=other_wcc.h_tilde[
                                     wc_cluster.cluster_id,
                                     self.current_step,
@@ -175,6 +171,9 @@ class WirelessEnvironment(ParallelEnv):
                                 other_wcc.transmit_power[other_device, 0]
                                 * other_wcc.P_sum
                             )
+
+                            # test without interference_h
+                            # interference_transmit_power = 0.0
 
                             interference[0, subchannel] += (
                                 interference_h * interference_transmit_power
@@ -206,7 +205,7 @@ class WirelessEnvironment(ParallelEnv):
 
         return rewards
 
-    def get_rewards(self) -> Dict[int, Reward]:
+    def get_rewards(self) -> Dict[str, Reward]:
         rewards = {}
         for agent in self.agents:
             agent: str
@@ -237,7 +236,7 @@ class WirelessEnvironment(ParallelEnv):
         return observations
 
     def get_infos(
-        self, rewards: Dict[str, Dict[str, float]]
+        self, rewards: Dict[str, Reward]
     ) -> Dict[str, Dict[str, float]]:
         infos = {}
 
@@ -245,7 +244,7 @@ class WirelessEnvironment(ParallelEnv):
             agent: str
 
             wc_cluster = self.wc_clusters[agent]
-            agent_reward = rewards.get(agent)
+            agent_reward = rewards[agent]
             infos.update({agent: wc_cluster.get_info(agent_reward)})
 
         return infos
@@ -283,7 +282,7 @@ class WirelessEnvironment(ParallelEnv):
             wc_cluster.step()
 
         _rewards = self.get_rewards()
-        rewards = {agent: _rewards.get(agent).reward_sum for agent in _rewards}
+        rewards = {agent: _rewards[agent].reward_sum for agent in _rewards}
 
         observations = self.get_observations()
 
@@ -353,7 +352,7 @@ class WirelessEnvironment(ParallelEnv):
                 range(len(packets)),
                 packets,
                 color=colors[idx],
-                tick_label=[f"Device {i+1}" for i in range(cluster.num_devices)],
+                tick_label=[f"Device {i + 1}" for i in range(cluster.num_devices)],
             )
             ax_bar.set_title(f"Cluster {cid} Num. Sent Packets")
             ax_bar.set_xlabel("Device ID")
