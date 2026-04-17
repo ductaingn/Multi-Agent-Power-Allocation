@@ -289,9 +289,7 @@ def signal_power(p: float, h: float) -> float:
     return p * h
 
 
-def gamma(
-    w: float, s: float, interference: float, noise: float
-) -> float:
+def gamma(w: float, s: float, interference: float, noise: float) -> float:
     """
     Calculate the signal-to-noise ratio (SNR).
 
@@ -395,7 +393,9 @@ def segments_intersect(s1, s2) -> bool:
     return False
 
 
-def rotate_points(points, angle_degrees, origin=(0, 0)):
+def rotate_points(
+    points: np.ndarray, angle_degrees: float, origin: tuple[float, float] = (0, 0)
+):
     """
     Rotate 2D points around a given origin by a specified angle.
 

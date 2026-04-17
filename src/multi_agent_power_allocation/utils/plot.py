@@ -15,6 +15,7 @@ from matplotlib.transforms import TransformedBbox, Bbox
 
 from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.wireless_environment.constants import MAP_SIZE
+from multi_agent_power_allocation.wireless_environment.utils import rotate_points
 
 DEVICE_IMG = mpimg.imread(os.path.join(BASE_DIR, "img", "device.png"))
 AP_IMG = mpimg.imread(os.path.join(BASE_DIR, "img", "AP.png"))
@@ -63,7 +64,13 @@ class ImageHandler(HandlerBase):
         return [image]
 
 
-def plot_positions(ax: Axes, positions: List[Dict], colors: Colormap) -> None:
+def plot_positions(
+    ax: Axes,
+    positions: List[Dict],
+    colors: Colormap,
+    dynamic_obstacles: bool = False,
+    save_path: str | None = None,
+) -> None:
     """
     Plot APs, IoT devices and obstacles positions
 
@@ -75,6 +82,8 @@ def plot_positions(ax: Axes, positions: List[Dict], colors: Colormap) -> None:
         The positions of APs, IoT devices and obstacles
     colors : Colormap
         The colormap for each cluster
+    dynamic_obstacles : bool
+        Whether the obtacles change positions, assuming they will rotate 90 degrees around AP
     """
     ax.set_title("Access Points and IoT Devices Positions")
     ax.set_xlabel("X")
@@ -103,7 +112,7 @@ def plot_positions(ax: Axes, positions: List[Dict], colors: Colormap) -> None:
         # Add AP legend entry
         ap_proxy = Line2D([0], [0])  # invisible proxy
         legend_handles.append(ap_proxy)
-        legend_labels.append(f"Cluster {cid+1} Access Point")
+        legend_labels.append(f"Cluster {cid + 1} Access Point")
         handler_map[ap_proxy] = ImageHandler(ap_img)
 
         # --- Plot devices ---
@@ -118,7 +127,7 @@ def plot_positions(ax: Axes, positions: List[Dict], colors: Colormap) -> None:
         # Add Devices legend entry
         device_proxy = Line2D([0], [0])  # invisible proxy
         legend_handles.append(device_proxy)
-        legend_labels.append(f"Cluster {cid+1} Devices")
+        legend_labels.append(f"Cluster {cid + 1} Devices")
         handler_map[device_proxy] = ImageHandler(device_img)
 
         # --- Plot obstacles ---
@@ -126,29 +135,58 @@ def plot_positions(ax: Axes, positions: List[Dict], colors: Colormap) -> None:
             start_point, end_point = pos
             x_coords = [start_point[0], end_point[0]]
             y_coords = [start_point[1], end_point[1]]
-            ax.plot(x_coords, y_coords, color="k", linewidth=4)
+            ax.plot(x_coords, y_coords, color="k", linewidth=6)
+
+            if dynamic_obstacles:
+                updated_pos = rotate_points(
+                    np.array(pos), -90.0, np.array([ap_x, ap_y])
+                )
+                ax.plot(
+                    updated_pos[:, 0],
+                    updated_pos[:, 1],
+                    color="grey",
+                    linewidth=6,
+                    linestyle="dotted",
+                )
 
     # Add obstacles legend entry (use Line2D directly)
-    legend_handles.append(Line2D([0], [0], color="k", linewidth=3))
-    legend_labels.append("Obstacles")
+    legend_handles.append(Line2D([0], [0], color="k", linewidth=10))
+    legend_labels.append(r"Obstacles $t < 2000$")
+    # Add obstacles legend entry (use Line2D directly)
+    legend_handles.append(
+        Line2D([0], [0], color="grey", linewidth=10, linestyle="dashed")
+    )
+    legend_labels.append(r"Obstacles $t \geq 2000$")
 
     # --- Build legend ---
     ax.legend(
         legend_handles,
         legend_labels,
         handler_map=handler_map,
-        # bbox_to_anchor=(1.00, 1),  # shift legend outside to the right
+        bbox_to_anchor=(1.00, 0.925),  # shift legend outside to the right
         loc="upper left",
-        fontsize=20,
+        fontsize=40,
     )
     ax.grid(True, linestyle="--", alpha=0.5)
+
+    if save_path is not None:
+        plt.rcParams.update(
+            {"pdf.fonttype": 42, "ps.fonttype": 42, "font.family": "serif"}
+        )
+        plt.savefig(
+            save_path,
+            format="pdf",
+            bbox_inches="tight",  # Removes white margins around the figure
+            pad_inches=0.05,  # Adds a tiny professional padding
+            transparent=True,  # Useful for presentations
+        )
 
 
 if __name__ == "__main__":
     import json
     from multi_agent_power_allocation.wireless_environment.utils import rotate_points
 
-    scenario = "scenario_4"
+    scenario = "scenario_5"
     data_path = os.path.join(BASE_DIR, "data", scenario)
     cluster_folders = sorted(
         [
@@ -167,7 +205,8 @@ if __name__ == "__main__":
             positions.append(json.load(file))
             positions[-1].update({"ID": cluster_id})
 
-    ax = plt.subplot()
+    fig = plt.figure(figsize=(12, 12))
+    ax = fig.add_subplot(111)
     ax.set_aspect("equal", adjustable="box")
 
     cmap = plt.get_cmap("tab10")
@@ -185,5 +224,7 @@ if __name__ == "__main__":
         position["obstacles"][0] = rotate_points(
             position["obstacles"][0], 90, position["AP"]
         )
-    plot_positions(ax, positions, colors=colors)
+    plot_positions(
+        ax, positions, colors=colors, dynamic_obstacles=True, save_path="./scenario.pdf"
+    )
     plt.show()

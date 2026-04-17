@@ -199,15 +199,15 @@ class WirelessCommunicationCluster:
         """
         self.W_sub = self.W_sub_total / self.n_sub_channels
         self.W_mw = self.W_mw_total / self.n_beams
-        assert (
-            self.num_devices == self.device_positions.shape[0]
-        ), f"Number of devices ({self.num_devices}) doesn't match the shape of device positions ({self.device_positions.shape})"
-        assert (
-            self.num_sub_channel <= self.h_tilde.shape[-1]
-        ), "Number of subchannel doesn't match the shape of h_tilde"
-        assert (
-            self.num_beam <= self.h_tilde.shape[-1]
-        ), "Number of beam doesn't match the shape of h_tilde"
+        assert self.num_devices == self.device_positions.shape[0], (
+            f"Number of devices ({self.num_devices}) doesn't match the shape of device positions ({self.device_positions.shape})"
+        )
+        assert self.num_sub_channel <= self.h_tilde.shape[-1], (
+            "Number of subchannel doesn't match the shape of h_tilde"
+        )
+        assert self.num_beam <= self.h_tilde.shape[-1], (
+            "Number of beam doesn't match the shape of h_tilde"
+        )
 
         self.distance_to_AP = np.linalg.norm(
             self.device_positions - self.AP_position, axis=1
@@ -309,52 +309,67 @@ class WirelessCommunicationCluster:
         They are fixed for now
         """
         clusters = []
-        clusters.append(
-            {
-                "AP": [100.0, 100.0],
-                "devices": [[120.0, 100.0], [100.0, 120.0], [15.0, 20.0]],
-                "obstacles": [[[90.0, 110.0], [110.0, 110.0]]],
-            }
-        )
-        clusters.append(
-            {
-                "AP": [-100.0, 100.0],
-                "devices": [[-80.0, 100.0], [-100.0, 120.0], [-185.0, 20.0]],
-                "obstacles": [[[-90.0, 110.0], [-110.0, 110.0]]],
-            }
-        )
-        clusters.append(
-            {
-                "AP": [-100.0, -100.0],
-                "devices": [[-80.0, -100.0], [-100.0, -80.0], [-185.0, -180.0]],
-                "obstacles": [[[-90.0, -90.0], [-110.0, -90.0]]],
-            }
-        )
-        clusters.append(
-            {
-                "AP": [100.0, -100.0],
-                "devices": [[80.0, -100.0], [100.0, -80.0], [15.0, -180.0]],
-                "obstacles": [[[110.0, -90.0], [90.0, -90.0]]],
-            }
-        )
+        AP_positions = [
+            [100.0, 100.0],
+            [-100.0, 100.0],
+            [-100.0, -100.0],
+            [100.0, -100.0],
+        ]
+        respective_device_positions = [
+            [20, 0],  # Device 1 
+            [0, 20],  # Device 2
+            [-85, -80],  # Device 3
+            [-45, 40],  # Device 4
+            [10, -70],  # Device 5
+            [-40, -20],  # Device 6
+            [-40, 15],  # Device 7
+            [60, 55],  # Device 8
+            [45, 5],  # Device 9
+            [50, -40],  # Device 10
+            [40, 60],  # Device 11
+            [-20, -60],  # Device 12
+            [-20, 80],  # Device 13
+            [20, -40],  # Device 14
+            [-80, 80],  # Device 15
+        ]
+        respective_obstacle_positions = [[[-10.0, 10.0], [10.0, 10.0]]]
+
+        for i in range(num_cluster):
+            ap = AP_positions[i]
+            clusters.append(
+                {
+                    "AP": ap,
+                    "devices": [
+                        (np.array(ap) + np.array(d)).tolist()
+                        for d in respective_device_positions[:num_device]
+                    ],
+                    "obstacles": [
+                        [
+                            (np.array(ap) + np.array(o[0])).tolist(),
+                            (np.array(ap) + np.array(o[1])).tolist(),
+                        ]
+                        for o in respective_obstacle_positions
+                    ],
+                }
+            )
 
         if num_cluster > 4:
             raise NotImplementedError("Supported upto 4 APs only!")
 
         for i in range(num_cluster):
-
-            AP_pos = clusters[i]["AP"]
+            AP_positions = clusters[i]["AP"]
             for k in range(num_device):
-
-                if k >= 3:
+                if k >= 15:
                     clusters[i]["devices"].append(
                         [
                             np.random.randint(
-                                AP_pos[0] - AP_RANGE / 2, AP_pos[1] - AP_RANGE / 2
-                            ),
+                                AP_positions[0] - AP_RANGE / 2,
+                                AP_positions[1] - AP_RANGE / 2,
+                            ).tolist(),
                             np.random.randint(
-                                AP_pos[1] - AP_RANGE / 2, AP_pos[1] - AP_RANGE / 2
-                            ),
+                                AP_positions[1] - AP_RANGE / 2,
+                                AP_positions[1] - AP_RANGE / 2,
+                            ).tolist(),
                         ]
                     )
 
@@ -427,6 +442,8 @@ class WirelessCommunicationCluster:
                 exist_ok=True,
             )
 
+        cls.generate_postitions(scenario_name, num_cluster, num_device)
+
         cls.generate_h_tilde(
             scenario_name,
             num_cluster,
@@ -438,7 +455,6 @@ class WirelessCommunicationCluster:
             sigma,
             seed,
         )
-        cls.generate_postitions(scenario_name, num_cluster, num_device)
 
     def set_num_send_packet(self, num_send_packet: np.ndarray):
         self.num_send_packet = num_send_packet.copy()
@@ -860,69 +876,71 @@ class WirelessCommunicationCluster:
         )
 
         for k in range(self.num_devices):
-            info[f"{prefix}/ Device {k+1}/ Num. Sent packet/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Sent packet/ Sub6GHz"] = (
                 self.num_send_packet[k, 0]
             )
-            info[f"{prefix}/ Device {k+1}/ Num. Sent packet/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Sent packet/ mmWave"] = (
                 self.num_send_packet[k, 1]
             )
 
-            info[f"{prefix}/ Device {k+1}/ Num. Received packet/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Received packet/ Sub6GHz"] = (
                 self.num_received_packet[k, 0]
             )
-            info[f"{prefix}/ Device {k+1}/ Num. Received packet/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Received packet/ mmWave"] = (
                 self.num_received_packet[k, 1]
             )
 
-            info[f"{prefix}/ Device {k+1}/ Num. Dropped packet/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Dropped packet/ Sub6GHz"] = (
                 self.num_send_packet[k, 0] - self.num_received_packet[k, 0]
             )
-            info[f"{prefix}/ Device {k+1}/ Num. Dropped packet/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Dropped packet/ mmWave"] = (
                 self.num_send_packet[k, 1] - self.num_received_packet[k, 1]
             )
 
-            info[f"{prefix}/ Device {k+1}/ Power/ Sub6GHz"] = self.transmit_power[k, 0]
-            info[f"{prefix}/ Device {k+1}/ Power/ mmWave"] = self.transmit_power[k, 1]
-
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate/ Global"] = (
-                self.global_packet_loss_rate[k]
-            )
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate/ Sub6GHz"] = (
-                self.packet_loss_rate[k, 0]
-            )
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate/ mmWave"] = (
-                self.packet_loss_rate[k, 1]
-            )
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate time window/ Sub6GHz"] = (
-                self.packet_loss_rate_stacked[:, k, 0].mean()
-            )
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate time window/ mmWave"] = (
-                self.packet_loss_rate_stacked[:, k, 1].mean()
-            )
-            info[f"{prefix}/ Device {k+1}/ Average rate/ Sub6GHz"] = self.average_rate[
+            info[f"{prefix}/ Device {k + 1}/ Power/ Sub6GHz"] = self.transmit_power[
                 k, 0
             ]
-            info[f"{prefix}/ Device {k+1}/ Average rate/ mmWave"] = self.average_rate[
+            info[f"{prefix}/ Device {k + 1}/ Power/ mmWave"] = self.transmit_power[k, 1]
+
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate/ Global"] = (
+                self.global_packet_loss_rate[k]
+            )
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate/ Sub6GHz"] = (
+                self.packet_loss_rate[k, 0]
+            )
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate/ mmWave"] = (
+                self.packet_loss_rate[k, 1]
+            )
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate time window/ Sub6GHz"] = (
+                self.packet_loss_rate_stacked[:, k, 0].mean()
+            )
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate time window/ mmWave"] = (
+                self.packet_loss_rate_stacked[:, k, 1].mean()
+            )
+            info[f"{prefix}/ Device {k + 1}/ Average rate/ Sub6GHz"] = (
+                self.average_rate[k, 0]
+            )
+            info[f"{prefix}/ Device {k + 1}/ Average rate/ mmWave"] = self.average_rate[
                 k, 1
             ]
-            info[f"{prefix}/ Device {k+1}/ Average rate time window/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Average rate time window/ Sub6GHz"] = (
                 self.average_rate_stacked[:, k, 0].mean()
             )
-            info[f"{prefix}/ Device {k+1}/ Average rate time window/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Average rate time window/ mmWave"] = (
                 self.average_rate_stacked[:, k, 1].mean()
             )
-            info[f"{prefix}/ Device {k+1}/ Interference/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Interference/ Sub6GHz"] = (
                 self.per_device_interference[k, 0]
             )
-            info[f"{prefix}/ Device {k+1}/ Interference/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Interference/ mmWave"] = (
                 self.per_device_interference[k, 1]
             )
 
             if hasattr(self, "estimated_ideal_power"):
-                info[f"{prefix}/ Device {k+1}/ Estimated ideal power/ Sub6GHz"] = (
+                info[f"{prefix}/ Device {k + 1}/ Estimated ideal power/ Sub6GHz"] = (
                     self.estimated_ideal_power[k, 0]
                 )
-                info[f"{prefix}/ Device {k+1}/ Estimated ideal power/ mmWave"] = (
+                info[f"{prefix}/ Device {k + 1}/ Estimated ideal power/ mmWave"] = (
                     self.estimated_ideal_power[k, 1]
                 )
 
