@@ -53,14 +53,15 @@ class Logger:
             num_received_packet_acc = cluster_data.pop(
                 f"{prefix}/ Accumulate/ Num. Received packet"
             )
-            fig = self.plot_interface_usage(
-                num_sent_packet_acc,
-                num_received_packet_acc,
-            )
+            # Disable log Plotly image to save WandB store space
+            # fig = self.plot_interface_usage(
+            #     num_sent_packet_acc,
+            #     num_received_packet_acc,
+            # )
 
-            cluster_data.update(
-                {f"{prefix}/ Overall/ Interface Usage": wandb.Plotly(fig)}
-            )
+            # cluster_data.update(
+            #     {f"{prefix}/ Overall/ Interface Usage": wandb.Plotly(fig)}
+            # )
 
             log_data.update(cluster_data)
 
