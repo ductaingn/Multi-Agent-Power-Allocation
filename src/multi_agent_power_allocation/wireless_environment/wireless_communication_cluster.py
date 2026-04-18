@@ -308,6 +308,8 @@ class WirelessCommunicationCluster:
         Generate AP, IoT devices and obstacles positions
         They are fixed for now
         """
+        print("Generating APs, devices, and obstacles positions...")
+
         clusters = []
         AP_positions = [
             [100.0, 100.0],
@@ -376,9 +378,13 @@ class WirelessCommunicationCluster:
             save_path = os.path.join(
                 BASE_DIR, "data", scenario_name, f"cluster_{i}", "positions.json"
             )
-
-            with open(save_path, "wt", encoding="utf-8") as file:
-                json.dump(clusters[i], file, indent=4)
+            
+            try:
+                with open(save_path, "wt", encoding="utf-8") as file:
+                    json.dump(clusters[i], file, indent=4)
+                    print(f"Saved APs, devices, and obstacles positions of cluster {i} at \n{save_path}")
+            except Exception as e:
+                print(f"Error occured when trying to save APs, devices, and obstacles positions: {e}")
 
     @classmethod
     def generate_h_tilde(
@@ -397,6 +403,8 @@ class WirelessCommunicationCluster:
         Generate channel power gain for all IoT devices and subchannel/beam pair
         Array of generated complex channel coefficients with shape (num_AP, num_timestep, 2, num_device, num_subchannel + num_beam).
         """
+        print("Generating channel power gain...")
+
         for i in range(num_cluster):
             save_path = os.path.join(
                 BASE_DIR, "data", scenario_name, f"cluster_{i}", "h_tilde.pickle"
@@ -420,8 +428,12 @@ class WirelessCommunicationCluster:
 
             h = np.array(h)
 
-            with open(save_path, "wb") as file:
-                pickle.dump(h, file)
+            try:
+                with open(save_path, "wb") as file:
+                    pickle.dump(h, file)
+                print(f"Saved channel power gain of cluster {i} at \n{save_path}")
+            except Exception as e:
+                print(f"Error occured when trying to save channel power gain: {e}")
 
     @classmethod
     def generate_data(
