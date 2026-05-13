@@ -334,7 +334,7 @@ class WirelessCommunicationCluster:
             [20, -40],  # Device 14
             [-80, 80],  # Device 15
         ]
-        respective_obstacle_positions = [[[-10.0, 10.0], [10.0, 10.0]]]
+        respective_obstacle_positions = [[[-0.5, 10.0], [0.5, 10.0]]]
 
         for i in range(num_cluster):
             ap = AP_positions[i]
@@ -555,6 +555,8 @@ class WirelessCommunicationCluster:
             if segments_intersect(
                 obs, np.array([self.device_positions[device_index], self.AP_position])
             ):
+                print(f"\nCluster: {self.cluster_id}")
+                print(f"Time step: {self.current_step}.\n\tDevice {device_index+1} is blocked!")
                 return True
 
         return False

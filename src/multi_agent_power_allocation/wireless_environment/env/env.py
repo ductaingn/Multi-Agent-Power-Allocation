@@ -1,5 +1,4 @@
 from typing import Dict, Any, List
-import random
 import attrs
 
 from pettingzoo import ParallelEnv

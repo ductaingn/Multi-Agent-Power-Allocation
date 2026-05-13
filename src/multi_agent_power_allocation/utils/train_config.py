@@ -97,6 +97,7 @@ class TrainConfig:
                     "packet_loss_rate_time_window": wc_cluster_config[
                         "packet_loss_rate_time_window"
                     ],
+                    "P_sum": pow(wc_cluster_config["P_sum"], 5 / 10) * 1e-3,
                 }
             )
 

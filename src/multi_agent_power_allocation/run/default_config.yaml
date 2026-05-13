@@ -16,6 +16,7 @@ env_config:
     num_beam: 5
     L_max: 10
     packet_loss_rate_time_window: 100
+    P_sum: 10 # dBm
 
 model_config:
   latent_dim: 256
