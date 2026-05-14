@@ -225,7 +225,7 @@ class SACPA(Algorithm):
     ) -> Reward:
         def estimate_ideal_power(num_send_packet, CGINR, W):
             if CGINR == 0:
-                return 1.0
+                return 0.0
 
             ideal_power = (
                 2 ** ((num_send_packet * wc_cluster.D) / (W * wc_cluster.T)) - 1
