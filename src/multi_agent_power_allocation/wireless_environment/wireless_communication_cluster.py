@@ -555,8 +555,6 @@ class WirelessCommunicationCluster:
             if segments_intersect(
                 obs, np.array([self.device_positions[device_index], self.AP_position])
             ):
-                print(f"\nCluster: {self.cluster_id}")
-                print(f"Time step: {self.current_step}.\n\tDevice {device_index+1} is blocked!")
                 return True
 
         return False
