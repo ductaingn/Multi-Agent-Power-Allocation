@@ -3,6 +3,7 @@ env_config:
   # render_mode: "human"
   num_cluster: 4
   max_num_step: 10000
+  dynamic_obstacles: False
   seed: 1
   
   reward_coef:

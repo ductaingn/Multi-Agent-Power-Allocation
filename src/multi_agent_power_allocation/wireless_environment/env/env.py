@@ -42,6 +42,7 @@ class WirelessEnvironment(ParallelEnv):
     n_warm_up_step: int = attrs.field()
     num_cluster: int = attrs.field(default=2, kw_only=True)
     max_num_step: int = attrs.field(default=10_000)
+    dynamic_obstacles: bool = attrs.field(default=True)
     current_step: int = attrs.field(default=1)
     seed: int = attrs.field(default=None)
     rng: np.random.Generator = attrs.field(default=None, kw_only=True)
@@ -291,7 +292,7 @@ class WirelessEnvironment(ParallelEnv):
         if self.current_step > self.max_num_step + 1:
             truncations = {agent: True for agent in self.agents}
 
-        if self.current_step == 2000:
+        if self.current_step == 2000 and self.dynamic_obstacles:
             AP_positions = [
                 wc_cluster.AP_position for wc_cluster in self.wc_clusters.values()
             ]
