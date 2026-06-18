@@ -27,7 +27,7 @@ class DQN(Algorithm):
     interface_hash_map: Dict[int, np.ndarray] = attrs.field(init=False)
 
     def __attrs_post_init__(self):
-        self.num_iot_devices = int(
+        self.num_iot_devices = round(
             np.log(self.low_level_algorithm.action_space.n) / np.log(3)
         )
         grids = np.meshgrid(*[np.arange(3)] * self.num_iot_devices, indexing="ij")
