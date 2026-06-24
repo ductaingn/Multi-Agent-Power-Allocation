@@ -290,11 +290,7 @@ class SACPF(Algorithm):
         #     (wc_cluster.current_step - 1) * prev_reward_qos + reward_qos
         # ) / wc_cluster.current_step
 
-        instance_reward = (
-            reward_coef["reward_qos"] * reward_qos
-            + reward_coef["reward_power"] * reward_power
-        )
-
+        instance_reward = reward_coef["reward_qos"] * reward_qos
         return Reward(
             reward_sum=instance_reward,
             reward_components={
