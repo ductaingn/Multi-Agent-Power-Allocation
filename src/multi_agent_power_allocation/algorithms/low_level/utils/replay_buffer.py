@@ -408,6 +408,10 @@ class ReplayBuffer(BaseBuffer):
             batch_inds = np.random.randint(0, self.pos, size=batch_size)
         return self._get_samples(batch_inds)
 
+    def latest(self) -> ReplayBufferSamples:
+        """The transition added last (for algorithms that learn online)."""
+        return self._get_samples(np.array([(self.pos - 1) % self.buffer_size]))
+
     def _get_samples(self, batch_inds: np.ndarray) -> ReplayBufferSamples:
         # Sample randomly the env idx
         env_indices = np.random.randint(0, high=self.n_envs, size=(len(batch_inds),))

@@ -29,6 +29,8 @@ class MultiAgentPolicyManager:
     def learn(self, data: Dict[str, ReplayBufferSamples]):
         res = {}
         for agent_id, policy in self.policies.items():
+            if agent_id not in data:  # still in its warm-up phase
+                continue
             agent_data = data[agent_id]
             actor_loss, critic_loss, critic2_loss, alpha_loss, alpha = policy.learn(
                 agent_data
@@ -70,7 +72,7 @@ class MultiAgentTrainer:
         for agent_id, policy in self.multi_agent_manager.policies.items():
             policy.low_level_algorithm.actor.train(False)
 
-            if self.num_timesteps < self.learning_start:
+            if self.num_timesteps < self.learning_start and not policy.learns_online:
                 agent_actions = np.array(
                     [self.multi_agent_manager.envs.action_spaces[agent_id].sample()]
                 )
@@ -103,10 +105,12 @@ class MultiAgentTrainer:
         return infos, rewards
 
     def sample_data(self):
-        data = {
-            agent_id: self.replay_buffer[agent_id].sample(self.batch_size)
-            for agent_id in self.multi_agent_manager.policies.keys()
-        }
+        data = {}
+        for agent_id, policy in self.multi_agent_manager.policies.items():
+            if policy.learns_online:
+                data[agent_id] = self.replay_buffer[agent_id].latest()
+            elif self.num_timesteps >= self.learning_start:
+                data[agent_id] = self.replay_buffer[agent_id].sample(self.batch_size)
 
         return data
 
@@ -135,7 +139,7 @@ class MultiAgentTrainer:
 
                 # TODO: check terminations conditions:
                 data = self.sample_data()
-                if self.num_timesteps >= self.learning_start:
+                if data:
                     train_results = self.multi_agent_manager.learn(data)
                     log_data.update({"update_data": train_results})
 

@@ -137,6 +137,7 @@ class TrainConfig:
                         "packet_loss_rate_time_window"
                     ],
                     "P_sum": dbm_to_watt(wc_cluster_config["P_sum"]),
+                    "baseline_rate_estimate": wc_cluster_config.get("baseline_rate_estimate", "window"),
                 }
             )
 

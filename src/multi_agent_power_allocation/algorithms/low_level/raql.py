@@ -396,6 +396,61 @@ class RAQL(LowLevelAlgorithm):
 
         return unbatched_data
 
+    @property
+    def num_actions(self) -> int:
+        return int(np.prod(self.action_space.high - self.action_space.low + 1))
+
+    def max_q_value(self, q_table: QTable, state: tuple) -> float:
+        """
+        max_a Q(s, a) over *all* actions, as in (23): Q-tables are initialized to 0 (Algorithm 1,
+        line 2), so actions never tried in `s` count with value 0. (The cached best action of
+        QTable is not used: it is not updated when the value of the cached action decreases.)
+        """
+        row = q_table.table.get(state, {})
+        values = [float(np.squeeze(v)) for v in row.values()]
+        if len(row) < self.num_actions:
+            values.append(q_table.default_value)
+        return max(values)
+
+    def sample_untried_action(self, tried) -> tuple:
+        while True:
+            action = tuple(self.action_space.sample().flatten().tolist())
+            if action not in tried:
+                return action
+
+    def risk_averse_best_action(self, Q_random: QTable, state: tuple):
+        """
+        argmax_a Q_hat(s, a), with (22)
+            Q_hat(s, a) = Q_H(s, a) - lambda_p / (I - 1) * sum_i (Q_i(s, a) - mean_j Q_j(s, a))^2
+        over all actions. Actions never tried in `s` have Q_i(s, a) = 0 for every i, hence
+        Q_hat(s, a) = 0; if no tried action is better, an untried one is taken (uniformly).
+        Only the row of the current state is evaluated (building the full risk-averse table
+        every step is O(table size) and becomes the bottleneck once many states are visited).
+        """
+        actions = {}
+        for q_table in self.Q_tables:
+            if state in q_table.table:
+                actions.update(dict.fromkeys(q_table.table[state]))
+
+        def value(q_table: QTable, action) -> float:
+            row = q_table.table.get(state, {})
+            return float(np.squeeze(row.get(action, q_table.default_value)))
+
+        best_action, best_value = None, -np.inf
+        for action in actions:
+            q_values = np.array([value(q_table, action) for q_table in self.Q_tables])
+            risk = ((q_values - q_values.mean()) ** 2).sum()
+            risk_averse_value = (
+                value(Q_random, action) - self.lambda_p / (self.num_q_table - 1) * risk
+            )
+            if risk_averse_value > best_value:
+                best_action, best_value = action, risk_averse_value
+
+        untried_value = 0.0  # Q-tables are initialized to 0
+        if len(actions) < self.num_actions and best_value < untried_value:
+            return self.sample_untried_action(actions)
+        return best_action
+
     def inference(self, obs, **kwargs):
         unbatched_obs = self.unbatch_obs(obs)
         batched_actions = []
@@ -419,31 +474,7 @@ class RAQL(LowLevelAlgorithm):
                 action = tuple(action.flatten().tolist())
 
             else:
-                average_q_table = (
-                    sum(self.Q_tables, start=QTable(default_value=0)) / self.num_q_table
-                )
-                risk_averse_Q: QTable = Q_random - self.lambda_p / (
-                    self.num_q_table - 1
-                ) * (
-                    sum(
-                        (
-                            (self.Q_tables[i] - average_q_table) ** 2
-                            for i in range(self.num_q_table)
-                        ),
-                        start=QTable(default_value=0),
-                    )
-                )
-                action = risk_averse_Q.best_action(state=state)
-                if action is None:
-                    # If no action is found, sample a random action
-                    action = self.action_space.sample()
-                    action = tuple(action.flatten().tolist())
-
-                if action not in state:
-                    risk_averse_Q.update(state, action, risk_averse_Q.default_value)
-
-                if risk_averse_Q.table[state][action] < risk_averse_Q.default_value:
-                    action = self.action_space.sample()
+                action = self.risk_averse_best_action(Q_random, state)
 
             batched_actions.append(action)
 
@@ -459,6 +490,7 @@ class RAQL(LowLevelAlgorithm):
             obs = tuple(obs.flatten().tolist())
             next_obs = tuple(next_obs.flatten().tolist())
             act = tuple(act.flatten().tolist())
+            rew = float(np.squeeze(rew))  # (1,) array from the buffer -> scalar Q-values
 
             # Use Generator if available, otherwise fall back to global numpy RNG
             if self.rng is None:
@@ -478,7 +510,7 @@ class RAQL(LowLevelAlgorithm):
                     ].get(obs, act) * (
                         self.u(
                             rew
-                            + self.gamma * self.Q_tables[i].max_q_value(next_obs)
+                            + self.gamma * self.max_q_value(self.Q_tables[i], next_obs)
                             - self.Q_tables[i].get(obs, act)
                         )
                         - self.x0

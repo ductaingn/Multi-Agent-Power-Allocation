@@ -23,6 +23,39 @@ if TYPE_CHECKING:
 
 
 @attrs.define
+class CumulativeQoSReward:
+    """
+    Reward (21) of Dinh et al., ICC 2022 (RAQL):
+        r(t) = 1/t * sum_{tau<=t} sum_k PSR_k(tau) - sum_k [(1 - u_k^sub(t)) + (1 - u_k^mW(t))]
+    i.e. the packet success ratio is averaged over time while the QoS penalty uses the current
+    per-interface PLR, with u_k^v(t) = 1 if rho_k^v(t) <= rho_max (14).
+    """
+
+    psr_sum: float = 0.0
+    num_frames: int = 0
+
+    def __call__(self, wc_cluster, reward_coef: Dict[str, float]) -> "Reward":
+        sent = wc_cluster.num_send_packet.sum(axis=1)
+        received = wc_cluster.num_received_packet.sum(axis=1)
+        self.psr_sum += float(np.sum(received / sent))
+        self.num_frames += 1
+        psr_average = self.psr_sum / self.num_frames
+
+        qos_satisfied = wc_cluster.packet_loss_rate <= wc_cluster.qos_threshold  # (K, 2)
+        penalty = float(np.sum(1 - qos_satisfied))
+
+        reward_qos = psr_average - penalty
+        return Reward(
+            reward_sum=reward_coef["reward_qos"] * reward_qos,
+            reward_components={
+                "reward_qos": reward_qos,
+                "reward_psr_average": psr_average,
+                "reward_qos_penalty": penalty,
+            },
+        )
+
+
+@attrs.define
 class Reward:
     reward_sum: float
     reward_components: Dict[str, float]
@@ -31,6 +64,9 @@ class Reward:
 @attrs.define
 class Algorithm(ABC):
     low_level_algorithm: LowLevelAlgorithm
+    # True: learn at every frame from the latest transition only, from the first frame on
+    # (tabular RAQL, Algorithm 1 of Dinh et al.); False: replay mini-batches after a random warm-up
+    learns_online = False
 
     @classmethod
     @abstractmethod

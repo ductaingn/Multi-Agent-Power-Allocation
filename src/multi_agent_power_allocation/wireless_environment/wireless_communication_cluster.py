@@ -190,6 +190,18 @@ class WirelessCommunicationCluster:
         },
     )
 
+    baseline_rate_estimate: str = attrs.field(
+        default="window",
+        metadata={
+            "description": "Rate used by RAQL/DQN in the packet bound (15): 'window' = mean achieved rate over "
+            "the last `packet_loss_rate_time_window` frames (0 when unused), 'average' = mean rate over all "
+            "frames in which the link was used so far, without forgetting (the 'known average rate' of (15) "
+            "in Dinh et al.)."
+        },
+    )
+    used_rate_average: np.ndarray = attrs.field(init=False)
+    used_rate_count: np.ndarray = attrs.field(init=False)
+
     estimated_ideal_power: np.ndarray = attrs.field(init=False)
     per_device_interference: np.ndarray = attrs.field(init=False)
 
@@ -291,6 +303,9 @@ class WirelessCommunicationCluster:
                 ],
             ]
         )
+
+        self.used_rate_average = np.zeros(shape=(self.num_devices, 2))
+        self.used_rate_count = np.zeros(shape=(self.num_devices, 2))
 
         self.estimated_ideal_power = np.zeros(
             shape=(self.num_devices, 2)
@@ -687,6 +702,9 @@ class WirelessCommunicationCluster:
     def update_average_rate_stacked(self):
         self.average_rate_stacked[1:] = self.average_rate_stacked[:-1]
         self.average_rate_stacked[0] = self.instant_rate
+        used = self.num_send_packet > 0
+        self.used_rate_count[used] += 1
+        self.used_rate_average[used] += (self.instant_rate[used] - self.used_rate_average[used]) / self.used_rate_count[used]
 
     def update_packet_loss_rate(self):
         """
@@ -795,6 +813,10 @@ class WirelessCommunicationCluster:
         if isinstance(algorithm, Algorithms.RAQL.value) or isinstance(
             algorithm, Algorithms.DQN.value
         ):
+            if self.baseline_rate_estimate == "average":
+                # Never-used links get L_max: no information yet, as for an unknown link
+                average_rate = np.where(self.used_rate_count > 0, self.used_rate_average, np.inf)
+                l = np.minimum(average_rate * self.T / self.D, self.L_max)
             l_max_estimate = np.floor(l)
         elif (
             isinstance(algorithm, Algorithms.SACPA.value)
