@@ -11,7 +11,6 @@ import yaml
 from torch.optim import Adam
 
 # from torch.optim.lr_scheduler import CosineAnnealingLR
-from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
 from multi_agent_power_allocation.algorithms.high_level import Algorithm
 from multi_agent_power_allocation.algorithms.low_level import (
@@ -20,6 +19,7 @@ from multi_agent_power_allocation.algorithms.low_level import (
     SAC,
     Random,
 )
+from multi_agent_power_allocation.data import scenario_dir
 from multi_agent_power_allocation.nn.module import DQNQNetwork, SACPAACtor, SACPACritic
 
 
@@ -90,25 +90,16 @@ class TrainConfig:
         env_config: Dict = config.get("env_config")
         wc_cluster_config: Dict = env_config.get("wc_cluster_config")
         num_cluster: int = env_config["num_cluster"]
+        # Not an environment argument: where the scenarios are (see `data.py`)
+        data_path = scenario_dir(
+            wc_cluster_config["scenario"], env_config.pop("data_dir", None)
+        )
 
         parsed_wc_clusters_configs = []
         obstacles_positions = []
         for i in range(num_cluster):
-            h_tilde_path = os.path.join(
-                BASE_DIR,
-                "data",
-                wc_cluster_config["scenario"],
-                f"cluster_{i}",
-                "h_tilde.pickle",
-            )
-
-            positions_path = os.path.join(
-                BASE_DIR,
-                "data",
-                wc_cluster_config["scenario"],
-                f"cluster_{i}",
-                "positions.json",
-            )
+            h_tilde_path = os.path.join(data_path, f"cluster_{i}", "h_tilde.pickle")
+            positions_path = os.path.join(data_path, f"cluster_{i}", "positions.json")
 
             if not os.path.isfile(h_tilde_path):
                 raise FileNotFoundError(f"`h_tilde` path is not valid!: {h_tilde_path}")

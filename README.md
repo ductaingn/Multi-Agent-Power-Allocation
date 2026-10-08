@@ -63,8 +63,25 @@ load_policies(f"{run_dir}/final", policies)
 
 ## Channel data
 
-Scenarios live in `src/multi_agent_power_allocation/data/<scenario>/cluster_<i>/`. The channel files must
-cover `max_num_step` frames; generate them with
+The channel realizations are not part of the package: they are on the Hugging Face Hub dataset
+[`ductaingn/sacra-channel-data`](https://huggingface.co/datasets/ductaingn/sacra-channel-data), and a
+scenario is downloaded on first use (only that scenario) into the data root:
+
+1. `env_config.data_dir` in the config,
+2. else the `MAPA_DATA_DIR` environment variable,
+3. else the `data/` folder of a source checkout (ignored by git),
+4. else `~/.cache/multi_agent_power_allocation`.
+
+| Scenario | APs | Devices per AP | Subchannels / beams | Frames |
+|---|---|---|---|---|
+| `scenario_1`, `scenario_2` | 2 | 3 | 5 | 10,000 |
+| `scenario_3` | 3 | 3 | 5 | 10,000 |
+| `scenario_4` | 4 | 3 | 5 | 10,000 |
+| `scenario_4_30k` | 4 | 3 | 4 | 30,000 |
+| `scenario_5` | 4 | 10 | 16 | 10,000 |
+| `scenario_5_30k` | 4 | 10 | 16 | 30,000 |
+
+New scenarios (which must cover `max_num_step` frames) can be generated into the data root:
 
 ```python
 from multi_agent_power_allocation.wireless_environment.wireless_communication_cluster import (
@@ -72,12 +89,7 @@ from multi_agent_power_allocation.wireless_environment.wireless_communication_cl
 )
 
 WirelessCommunicationCluster.generate_data(
-    scenario_name="scenario_4_30k",
-    num_cluster=4,
-    num_timestep=30000,
-    num_device=3,
-    num_subchannel=5,
-    num_beam=5,
-    seed=1,
+    scenario_name="my_scenario", num_cluster=4, num_timestep=30000,
+    num_device=3, num_subchannel=4, num_beam=4, seed=1,
 )
 ```

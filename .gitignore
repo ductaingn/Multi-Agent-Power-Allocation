@@ -10,4 +10,4 @@ debug.py
 *.egg-info
 .old
 checkpoints/
-src/multi_agent_power_allocation/data/*_30k/
+/data/

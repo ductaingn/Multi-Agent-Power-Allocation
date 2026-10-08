@@ -13,6 +13,7 @@ from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from matplotlib.transforms import Bbox, TransformedBbox
 
 from multi_agent_power_allocation import BASE_DIR
+from multi_agent_power_allocation.data import scenario_dir
 from multi_agent_power_allocation.wireless_environment.constants import MAP_SIZE
 from multi_agent_power_allocation.wireless_environment.utils import rotate_points
 
@@ -187,7 +188,7 @@ if __name__ == "__main__":
     from multi_agent_power_allocation.wireless_environment.utils import rotate_points
 
     scenario = "scenario_5"
-    data_path = os.path.join(BASE_DIR, "data", scenario)
+    data_path = scenario_dir(scenario)
     cluster_folders = sorted(
         [
             name

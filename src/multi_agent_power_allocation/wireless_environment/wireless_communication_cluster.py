@@ -12,9 +12,9 @@ from typing import Dict, Union
 import attrs
 import numpy as np
 
-from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
 from multi_agent_power_allocation.algorithms.high_level import Reward
+from multi_agent_power_allocation.data import data_root
 from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
 from multi_agent_power_allocation.wireless_environment.utils import (
     compute_h_mW,
@@ -318,6 +318,7 @@ class WirelessCommunicationCluster:
         scenario_name: str,
         num_cluster: int,
         num_device: int,
+        data_dir: str | None = None,
     ):
         """
         Generate AP, IoT devices and obstacles positions
@@ -391,7 +392,7 @@ class WirelessCommunicationCluster:
                     )
 
             save_path = os.path.join(
-                BASE_DIR, "data", scenario_name, f"cluster_{i}", "positions.json"
+                data_root(data_dir), scenario_name, f"cluster_{i}", "positions.json"
             )
 
             try:
@@ -417,6 +418,7 @@ class WirelessCommunicationCluster:
         mu: float,
         sigma: float,
         seed: int,
+        data_dir: str | None = None,
     ):
         """
         Generate channel power gain for all IoT devices and subchannel/beam pair
@@ -426,7 +428,7 @@ class WirelessCommunicationCluster:
 
         for i in range(num_cluster):
             save_path = os.path.join(
-                BASE_DIR, "data", scenario_name, f"cluster_{i}", "h_tilde.pickle"
+                data_root(data_dir), scenario_name, f"cluster_{i}", "h_tilde.pickle"
             )
 
             h = []
@@ -466,14 +468,16 @@ class WirelessCommunicationCluster:
         mu: float = 0,
         sigma: float = 1,
         seed: int = 1,
+        data_dir: str | None = None,
     ):
+        """Generate a scenario under the data root (see `multi_agent_power_allocation.data`)."""
         for i in range(num_cluster):
             os.makedirs(
-                os.path.join(BASE_DIR, "data", scenario_name, f"cluster_{i}"),
+                os.path.join(data_root(data_dir), scenario_name, f"cluster_{i}"),
                 exist_ok=True,
             )
 
-        cls.generate_postitions(scenario_name, num_cluster, num_device)
+        cls.generate_postitions(scenario_name, num_cluster, num_device, data_dir)
 
         cls.generate_h_tilde(
             scenario_name,
@@ -485,6 +489,7 @@ class WirelessCommunicationCluster:
             mu,
             sigma,
             seed,
+            data_dir,
         )
 
     def set_num_send_packet(self, num_send_packet: np.ndarray):
