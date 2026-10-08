@@ -17,7 +17,10 @@ env_config:
     num_beam: 5
     L_max: 10
     packet_loss_rate_time_window: 100
-    P_sum: 10 # dBm
+    # Total transmit power budget per AP, in dBm.
+    # NOTE: before the dBm->W fix, `10` here was converted to sqrt(10) mW, i.e. 5 dBm.
+    # Use 5 to reproduce the runs named "... 10 dBm ...".
+    P_sum: 5 # dBm
 
 model_config:
   latent_dim: 256

@@ -62,7 +62,14 @@ class DQN(LowLevelAlgorithm):
         self.q_net_target.train(mode)
 
     def inference(self, obs, deterministic: bool = False, **kwargs):
-        if not deterministic and torch.rand(1).cpu().item() < self.exploration_rate:
+        explore = (
+            not deterministic and torch.rand(1).cpu().item() < self.exploration_rate
+        )
+        if not deterministic:
+            # Decay once per environment step, like RAQL's epsilon
+            self.exploration_rate = self.exploration_schedule(self.exploration_rate)
+
+        if explore:
             actions = torch.tensor(
                 np.array([self.action_space.sample() for _ in range(obs.shape[0])])
             )

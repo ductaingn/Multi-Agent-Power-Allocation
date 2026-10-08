@@ -878,7 +878,7 @@ class WirelessCommunicationCluster:
             :, 1
         ].sum() / (self.num_devices)
         info[f"{prefix}/ Overall/ Average rate/ Global"] = (
-            info[f"{prefix}/ Overall/ Average rate/ mmWave"]
+            info[f"{prefix}/ Overall/ Average rate/ Sub6GHz"]
             + info[f"{prefix}/ Overall/ Average rate/ mmWave"]
         )
         info[f"{prefix}/ Overall/ Power usage"] = self.transmit_power.sum()
@@ -982,11 +982,12 @@ class WirelessCommunicationCluster:
         self.instant_rate = self._init_rate.copy()
         self.average_rate_stacked = np.zeros_like(self.average_rate_stacked)
         self.average_rate_stacked[:, ...] = self._init_rate.copy()
-        self.num_send_packet = self._init_num_send_packet
-        self.num_sent_packet_acc = self._init_num_send_packet
-        self.num_received_packet = self._init_num_received_packet
-        self.num_received_packet_acc = self._init_num_received_packet
-        self.transmit_power = self._init_transmit_power
+        # Copies: the accumulators are updated in place in `step()`
+        self.num_send_packet = self._init_num_send_packet.copy()
+        self.num_sent_packet_acc = self._init_num_send_packet.copy()
+        self.num_received_packet = self._init_num_received_packet.copy()
+        self.num_received_packet_acc = self._init_num_received_packet.copy()
+        self.transmit_power = self._init_transmit_power.copy()
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
         self.global_packet_loss_rate = np.zeros(shape=(self.num_devices))
         self.sum_packet_loss_rate = 0

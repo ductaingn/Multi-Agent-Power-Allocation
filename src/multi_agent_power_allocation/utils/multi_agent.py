@@ -59,7 +59,8 @@ class MultiAgentTrainer:
     @_last_obs.default
     def _last_obs_factory(self):
         obs, _ = self.multi_agent_manager.envs.reset()
-        return {agent_id: np.array([obs[agent_id]]) for agent_id in obs}
+        # Already batched by the vectorized env: (num_envs, obs_dim)
+        return {agent_id: obs[agent_id] for agent_id in obs}
 
     def collect_data(self):
         # Sample action
@@ -94,6 +95,8 @@ class MultiAgentTrainer:
                 done=terminations[agent_id],
                 infos=infos[agent_id],
             )
+
+        self._last_obs = next_observations
 
         return infos
 

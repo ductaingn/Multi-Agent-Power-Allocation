@@ -26,6 +26,10 @@ from multi_agent_power_allocation.algorithms.low_level import (
 from multi_agent_power_allocation.algorithms.high_level import Algorithm
 
 
+def dbm_to_watt(p_dbm: float) -> float:
+    return 10 ** (p_dbm / 10) * 1e-3
+
+
 @attrs.define
 class TrainConfig:
     config_file_path: str
@@ -97,7 +101,7 @@ class TrainConfig:
                     "packet_loss_rate_time_window": wc_cluster_config[
                         "packet_loss_rate_time_window"
                     ],
-                    "P_sum": pow(wc_cluster_config["P_sum"], 5 / 10) * 1e-3,
+                    "P_sum": dbm_to_watt(wc_cluster_config["P_sum"]),
                 }
             )
 
