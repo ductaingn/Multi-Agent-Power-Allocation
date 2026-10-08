@@ -85,16 +85,25 @@ class Trainer:
         self.policies = [f"agent_{i}_policy" for i in range(self.num_agent)]
 
     def get_env(self):
-        return WirelessEnvironment(**deepcopy(self.env_config))
+        # Channel realizations are read-only and large (~200MB per cluster for 10 devices):
+        # share them across env copies instead of deep-copying them
+        memo = {
+            id(wc_config["h_tilde"]): wc_config["h_tilde"]
+            for wc_config in self.env_config["wc_clusters_configs"]
+        }
+        return WirelessEnvironment(**deepcopy(self.env_config, memo))
 
     def get_replay_buffer(self) -> Dict[str, ReplayBuffer]:
         algorithm_mapping: Dict[str, Algorithm] = self.env_config["algorithm_mapping"]
         replay_buffers = {}
-        env = self.get_env()
+        wc_clusters_configs = self.env_config["wc_clusters_configs"]
 
-        for agent_id in algorithm_mapping.keys():
-            obs_space = env.observation_space(agent_id)
-            action_space = env.action_space(agent_id)
+        for agent_id, algorithm in algorithm_mapping.items():
+            wc_config = wc_clusters_configs[int(agent_id)]
+            obs_space = algorithm.observation_space(
+                wc_config["num_devices"], wc_config["L_max"]
+            )
+            action_space = algorithm.action_space(wc_config["num_devices"])
 
             replay_buffer = ReplayBuffer(
                 20_000,

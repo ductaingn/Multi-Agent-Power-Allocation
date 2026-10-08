@@ -147,10 +147,8 @@ def generate_h_tilde_device_channel(amount: int, mu: float, sigma: float) -> np.
     """
     re = np.random.normal(mu, sigma, amount)
     im = np.random.normal(mu, sigma, amount)
-    h_tilde = []
-    for i in range(amount):
-        h_tilde.append(complex(re[i], im[i]) / np.sqrt(2))
-    return np.array(h_tilde)
+    # Same values as `complex(re, im) / np.sqrt(2)` element-wise, but vectorized
+    return re / np.sqrt(2) + 1j * (im / np.sqrt(2))
 
 
 def generate_h_tilde(
