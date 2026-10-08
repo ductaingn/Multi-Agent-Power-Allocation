@@ -2,23 +2,29 @@
 Trainer
 """
 
-from typing import Dict, List
+import os
 from copy import deepcopy
-import attrs
+from typing import Dict, List, Optional
 
+import attrs
 import torch
 
-from multi_agent_power_allocation.wireless_environment.env import WirelessEnvironment
-from multi_agent_power_allocation.wireless_environment.env.wrapper import SyncVecEnv
-from multi_agent_power_allocation.utils.logger import Logger
+from multi_agent_power_allocation.algorithms.high_level import Algorithm
 from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
     ReplayBuffer,
 )
-from multi_agent_power_allocation.utils.multi_agent import (
-    MultiAgentTrainer,
-    MultiAgentPolicyManager,
+from multi_agent_power_allocation.utils.checkpoint import (
+    Checkpointer,
+    resolve_checkpoint_config,
+    slugify,
 )
-from multi_agent_power_allocation.algorithms.high_level import Algorithm
+from multi_agent_power_allocation.utils.logger import Logger
+from multi_agent_power_allocation.utils.multi_agent import (
+    MultiAgentPolicyManager,
+    MultiAgentTrainer,
+)
+from multi_agent_power_allocation.wireless_environment.env import WirelessEnvironment
+from multi_agent_power_allocation.wireless_environment.env.wrapper import SyncVecEnv
 
 
 @attrs.define
@@ -38,6 +44,9 @@ class Trainer:
     SAC_config: Dict = attrs.field()
     device: str = attrs.field()
     num_env: int = attrs.field()
+    checkpoint_config: Optional[Dict] = attrs.field(default=None)
+    # Plain YAML config, logged to WandB and stored next to checkpoints
+    raw_config: Optional[Dict] = attrs.field(default=None)
 
     @env_config.validator
     def _check_env_config(self, attribute, value: Dict):
@@ -85,16 +94,25 @@ class Trainer:
         self.policies = [f"agent_{i}_policy" for i in range(self.num_agent)]
 
     def get_env(self):
-        return WirelessEnvironment(**deepcopy(self.env_config))
+        # Channel realizations are read-only and large (~200MB per cluster for 10 devices):
+        # share them across env copies instead of deep-copying them
+        memo = {
+            id(wc_config["h_tilde"]): wc_config["h_tilde"]
+            for wc_config in self.env_config["wc_clusters_configs"]
+        }
+        return WirelessEnvironment(**deepcopy(self.env_config, memo))
 
     def get_replay_buffer(self) -> Dict[str, ReplayBuffer]:
         algorithm_mapping: Dict[str, Algorithm] = self.env_config["algorithm_mapping"]
         replay_buffers = {}
-        env = self.get_env()
+        wc_clusters_configs = self.env_config["wc_clusters_configs"]
 
-        for agent_id in algorithm_mapping.keys():
-            obs_space = env.observation_space(agent_id)
-            action_space = env.action_space(agent_id)
+        for agent_id, algorithm in algorithm_mapping.items():
+            wc_config = wc_clusters_configs[int(agent_id)]
+            obs_space = algorithm.observation_space(
+                wc_config["num_devices"], wc_config["L_max"]
+            )
+            action_space = algorithm.action_space(wc_config["num_devices"])
 
             replay_buffer = ReplayBuffer(
                 20_000,
@@ -116,10 +134,18 @@ class Trainer:
         multi_agent_manager = MultiAgentPolicyManager(policies, train_envs)
 
         # ======== logging setup =========
+        checkpointer_config = resolve_checkpoint_config(self.checkpoint_config)
+        history_path = None
+        if self.wandb_config.get("local_history", False):
+            history_path = os.path.join(
+                checkpointer_config["save_dir"], slugify(run_name), "history.npz"
+            )
         logger = Logger(
             project=self.wandb_config["project"],
-            config={"env_config": self.env_config},
+            entity=self.wandb_config.get("entity"),
+            config=self._wandb_config(policies),
             name=run_name,
+            history_path=history_path,
         )
 
         for agent_id in policies.keys():
@@ -133,11 +159,38 @@ class Trainer:
                 )
 
         # ======== trainer setup ========
+        checkpointer = Checkpointer(
+            policies=policies,
+            run_name=run_name,
+            config=self.checkpoint_config,
+            run_config=self.raw_config,
+            wandb_run=logger.wandb_run,
+        )
+
         trainer = MultiAgentTrainer(
-            multi_agent_manager, replay_buffers, self.max_num_step, 256, logger
+            multi_agent_manager,
+            replay_buffers,
+            self.max_num_step,
+            256,
+            logger,
+            checkpointer=checkpointer,
         )
 
         return trainer
+
+    def _wandb_config(self, policies: Dict[str, Algorithm]) -> Dict:
+        """
+        Avoid dumping channel matrices and full module reprs into the WandB config:
+        log the YAML config plus the algorithm name of each agent.
+        """
+        config = dict(self.raw_config or {})
+        config.setdefault("env_config", {})
+        config["env_config"] = dict(config["env_config"])
+        # Kept under the old key so existing analysis code (`.split("(")[0]`) still works
+        config["env_config"]["algorithm_mapping"] = {
+            agent_id: type(policy).__name__ for agent_id, policy in policies.items()
+        }
+        return config
 
     def train(self, run_name: str) -> Dict[str, float | str]:
         trainer = self.build(run_name)
@@ -145,5 +198,6 @@ class Trainer:
         # torch.autograd.set_detect_anomaly(True)
 
         trainer.train()
+        trainer.logger.save_history()
 
         trainer.logger.wandb_run.finish(exit_code=0)

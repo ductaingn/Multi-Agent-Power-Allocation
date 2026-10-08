@@ -1,12 +1,10 @@
 import attrs
-
+import gymnasium as gym
 import torch
 
-import gymnasium as gym
-
 from multi_agent_power_allocation.algorithms.low_level.low_level_algorithm import (
-    LowLevelAlgorithm,
     DummyActor,
+    LowLevelAlgorithm,
 )
 from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
     ReplayBufferSamples,
@@ -23,4 +21,4 @@ class Random(LowLevelAlgorithm):
         return torch.rand((batch_size,) + self.action_space.shape)
 
     def learn(self, data: ReplayBufferSamples):
-        return [0.0] * 5
+        return (0.0, 0.0, 0.0, 0.0, 0.0)

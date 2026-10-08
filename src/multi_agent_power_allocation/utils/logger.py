@@ -1,13 +1,10 @@
 import argparse
 import os
-from typing import Any, Callable, Dict, Optional, Tuple, List
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import attrs
-
 import numpy as np
-
 import plotly.graph_objects as go
-
 import wandb
 from wandb.sdk.wandb_run import Run
 
@@ -22,7 +19,13 @@ class Logger:
     run_id: Optional[str] = None
     config: Optional[argparse.Namespace] = None
     monitor_gym: bool = True
+    # Also keep every logged scalar in memory and write them to this .npz file at the end
+    # (compact alternative to WandB, e.g. on machines without credentials)
+    history_path: Optional[str] = None
     wandb_run: Run = attrs.field(init=False)
+    _history: Dict[str, int] = attrs.field(init=False, factory=dict)  # key -> column
+    _history_rows: List[np.ndarray] = attrs.field(init=False, factory=list)
+    _history_steps: List[int] = attrs.field(init=False, factory=list)
 
     @wandb_run.default
     def _wandb_run_factory(self):
@@ -47,24 +50,61 @@ class Logger:
             cluster_data: Dict = cluster_data[0]  # Unpack batch
             prefix = next(iter(cluster_data.keys())).split("/")[0]
 
-            num_sent_packet_acc = cluster_data.pop(
-                f"{prefix}/ Accumulate/ Num. Sent packet"
-            )
-            num_received_packet_acc = cluster_data.pop(
-                f"{prefix}/ Accumulate/ Num. Received packet"
-            )
-            fig = self.plot_interface_usage(
-                num_sent_packet_acc,
-                num_received_packet_acc,
-            )
+            # Accumulated counters are not logged
+            cluster_data.pop(f"{prefix}/ Accumulate/ Num. Sent packet")
+            cluster_data.pop(f"{prefix}/ Accumulate/ Num. Received packet")
+            # Disable log Plotly image to save WandB store space
+            # fig = self.plot_interface_usage(
+            #     num_sent_packet_acc,
+            #     num_received_packet_acc,
+            # )
 
-            cluster_data.update(
-                {f"{prefix}/ Overall/ Interface Usage": wandb.Plotly(fig)}
-            )
+            # cluster_data.update(
+            #     {f"{prefix}/ Overall/ Interface Usage": wandb.Plotly(fig)}
+            # )
 
             log_data.update(cluster_data)
 
         self.wandb_run.log(log_data, step=step)
+
+        if self.history_path is not None:
+            self._record(step, log_data)
+
+    def _record(self, step: int, log_data: Dict[str, Any]) -> None:
+        row = np.full(len(self._history), np.nan, dtype=np.float32)
+        extra = []
+        for key, value in log_data.items():
+            if isinstance(value, (int, float, np.integer, np.floating)) or (
+                isinstance(value, np.ndarray) and value.size == 1
+            ):
+                index = self._history.get(key)
+                if index is None:  # first time this key is logged
+                    self._history[key] = len(self._history)
+                    extra.append(float(value))
+                else:
+                    row[index] = float(value)
+        if extra:
+            row = np.concatenate([row, np.array(extra, dtype=np.float32)])
+        self._history_rows.append(row)
+        self._history_steps.append(step)
+
+    def save_history(self) -> Optional[str]:
+        if self.history_path is None or not self._history_steps:
+            return None
+        os.makedirs(os.path.dirname(os.path.abspath(self.history_path)), exist_ok=True)
+        values = np.full(
+            (len(self._history_rows), len(self._history)), np.nan, dtype=np.float32
+        )
+        for i, row in enumerate(self._history_rows):
+            values[i, : len(row)] = row
+        keys = sorted(self._history, key=self._history.get)  # column order
+        np.savez_compressed(
+            self.history_path,
+            keys=np.array(keys),
+            steps=np.array(self._history_steps, dtype=np.int64),
+            values=values,
+        )
+        return self.history_path
 
     def save_data(
         self,
@@ -139,7 +179,7 @@ class Logger:
         """
         num_dropped_packet = num_sent_packet - num_received_packet
         num_devices = num_sent_packet.shape[0]
-        x = [f"D{k+1}" for k in range(num_devices)]
+        x = [f"D{k + 1}" for k in range(num_devices)]
 
         fig = go.Figure()
 

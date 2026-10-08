@@ -1,13 +1,10 @@
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
 import attrs
-
 import numpy as np
-
 import torch
+from gymnasium.spaces import Box, Space
 from torch.nn.functional import softmax
-
-from gymnasium.spaces import Space, Box
 
 from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm import (
     Algorithm,
@@ -149,20 +146,18 @@ class Random(Algorithm):
                 wc_cluster.transmit_power, 1.0 / (wc_cluster.num_devices * 2)
             )
         else:
-            number_of_send_packet: np.ndarray = np.random.randint(
+            number_of_send_packet: np.ndarray = torch.randint(
                 0, wc_cluster.L_max, (wc_cluster.num_devices, 2)
-            )
+            ).numpy()
             power = (
-                torch.softmax(
-                    torch.tensor(np.random.rand(wc_cluster.num_devices * 2)), dim=-1
-                )
+                torch.softmax(torch.rand(wc_cluster.num_devices * 2), dim=-1)
                 .reshape(wc_cluster.num_devices, 2)
                 .numpy()
             )
 
             for k in range(wc_cluster.num_devices):
                 if number_of_send_packet[k].sum() == 0:
-                    if np.random.rand() > 0.5:
+                    if torch.rand(1).cpu().item() > 0.5:
                         number_of_send_packet[k, 0] = 1
                         power[k, 1] = 0  # For analyzing purpose
                     else:

@@ -1,16 +1,15 @@
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
 import attrs
-
 import numpy as np
-
 import torch
-
-from gymnasium.spaces import Space, Box, Discrete, MultiDiscrete
+from gymnasium.spaces import Box, Space
 
 from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm import (
     Algorithm,
+    CumulativeQoSReward,
     Reward,
+    full_budget_power,
 )
 from multi_agent_power_allocation.algorithms.low_level.raql import RAQL as LLRAQL
 
@@ -23,6 +22,13 @@ if TYPE_CHECKING:
 @attrs.define
 class RAQL(Algorithm):
     low_level_algorithm: LLRAQL
+    learns_online = True  # Algorithm 1 of Dinh et al.: one update per frame on the current transition
+    # False: every active link gets P_sum / (N + M) as in the original RAQL paper.
+    # True: the whole budget is used, split like SACPF (fairer power comparison).
+    full_power_budget: bool = attrs.field(default=False, kw_only=True)
+    reward_fn: CumulativeQoSReward = attrs.field(
+        init=False, factory=CumulativeQoSReward
+    )
 
     @classmethod
     def observation_space(  # pylint: disable=W0221
@@ -69,13 +75,17 @@ class RAQL(Algorithm):
         Flattened
         """
         return Box(
-            low=np.array([
-                np.zeros(shape=(num_iot_devices), dtype=int),
-            ]).flatten(),
-            high=np.array([
-                np.full(shape=(num_iot_devices), fill_value=2, dtype=int),
-            ]).flatten(),
-            dtype=int
+            low=np.array(
+                [
+                    np.zeros(shape=(num_iot_devices), dtype=int),
+                ]
+            ).flatten(),
+            high=np.array(
+                [
+                    np.full(shape=(num_iot_devices), fill_value=2, dtype=int),
+                ]
+            ).flatten(),
+            dtype=int,
         )
 
     def get_state(self, wc_cluster: "WirelessCommunicationCluster") -> np.ndarray:
@@ -95,8 +105,10 @@ class RAQL(Algorithm):
         _state[:, 1] = (
             wc_cluster.packet_loss_rate[:, 1] <= wc_cluster.qos_threshold
         ).astype(float)
-        _state[:, 2] = wc_cluster.num_received_packet[:, 0].copy() / wc_cluster.L_max
-        _state[:, 3] = wc_cluster.num_received_packet[:, 1].copy() / wc_cluster.L_max
+        # Number of ACKed packets Omega_k^v(t-1), as integers (13): the observation space is
+        # integer-valued, so normalized values would be truncated in the replay buffer
+        _state[:, 2] = wc_cluster.num_received_packet[:, 0].copy()
+        _state[:, 3] = wc_cluster.num_received_packet[:, 1].copy()
 
         return _state
 
@@ -151,6 +163,9 @@ class RAQL(Algorithm):
                 if number_of_send_packet[k, 1] == 0:
                     power[k, 1] = 0
 
+        if self.full_power_budget:
+            power = full_budget_power(number_of_send_packet)
+
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)
 
@@ -160,39 +175,4 @@ class RAQL(Algorithm):
         prev_reward_qos: float,
         reward_coef: Dict[str, float],
     ) -> Reward:
-        reward_qos = 0.0
-
-        for k in range(wc_cluster.num_devices):
-            qos_satisfaction = (
-                wc_cluster.packet_loss_rate[k, 0] < wc_cluster.qos_threshold,
-                wc_cluster.packet_loss_rate[k, 1] < wc_cluster.qos_threshold,
-            )
-
-            num_received_packet = (
-                wc_cluster.num_received_packet[k, 0],
-                wc_cluster.num_received_packet[k, 1],
-            )
-
-            num_send_packet = (
-                wc_cluster.num_send_packet[k, 0],
-                wc_cluster.num_send_packet[k, 1],
-            )
-
-            reward_qos += (
-                (num_received_packet[0] + num_received_packet[1])
-                / (num_send_packet[0] + num_send_packet[1])
-                - (1 - qos_satisfaction[0])
-                - (1 - qos_satisfaction[1])
-            )
-        reward_qos = (
-            (wc_cluster.current_step - 1) * prev_reward_qos + reward_qos
-        ) / wc_cluster.current_step
-
-        instance_reward = reward_coef["reward_qos"] * reward_qos
-
-        return Reward(
-            reward_sum=instance_reward,
-            reward_components={
-                "reward_qos": reward_qos,
-            },
-        )
+        return self.reward_fn(wc_cluster, reward_coef)

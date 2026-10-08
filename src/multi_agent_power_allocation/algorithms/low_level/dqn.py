@@ -2,24 +2,20 @@ from copy import deepcopy
 from typing import Callable
 
 import attrs
-
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-
-import numpy as np
-
 from gymnasium.spaces import Discrete
 
 from multi_agent_power_allocation.algorithms.low_level.low_level_algorithm import (
-    LowLevelAlgorithm,
     DummyActor,
+    LowLevelAlgorithm,
 )
-from multi_agent_power_allocation.nn.module import DQNQNetwork as QNetwork
 from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
     ReplayBufferSamples,
 )
-
+from multi_agent_power_allocation.nn.module import DQNQNetwork as QNetwork
 
 LAMBDA = 0.995  # Similar to RAQL
 
@@ -62,7 +58,14 @@ class DQN(LowLevelAlgorithm):
         self.q_net_target.train(mode)
 
     def inference(self, obs, deterministic: bool = False, **kwargs):
-        if not deterministic and np.random.rand() < self.exploration_rate:
+        explore = (
+            not deterministic and torch.rand(1).cpu().item() < self.exploration_rate
+        )
+        if not deterministic:
+            # Decay once per environment step, like RAQL's epsilon
+            self.exploration_rate = self.exploration_schedule(self.exploration_rate)
+
+        if explore:
             actions = torch.tensor(
                 np.array([self.action_space.sample() for _ in range(obs.shape[0])])
             )

@@ -3,29 +3,29 @@ Wireless Communication Cluster Module
 This module defines the base class for wireless communication cluster, each cluster represents a group of one Access Point (AP) serves K IoT devices through wireless communication.
 """
 
-import os
-from typing import Dict, Union
-import random
 import json
+import os
 import pickle
-import attrs
+import random
+from typing import Dict, Union
 
+import attrs
 import numpy as np
 
-from multi_agent_power_allocation import BASE_DIR
-from multi_agent_power_allocation.wireless_environment.utils import (
-    signal_power,
-    gamma,
-    compute_rate,
-    compute_h_sub,
-    compute_h_mW,
-    generate_h_tilde,
-    segments_intersect,
-    rotate_points,
-)
-from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
 from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
 from multi_agent_power_allocation.algorithms.high_level import Reward
+from multi_agent_power_allocation.data import data_root
+from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
+from multi_agent_power_allocation.wireless_environment.utils import (
+    compute_h_mW,
+    compute_h_sub,
+    compute_rate,
+    gamma,
+    generate_h_tilde,
+    rotate_points,
+    segments_intersect,
+    signal_power,
+)
 
 
 @attrs.define(slots=False)
@@ -108,7 +108,7 @@ class WirelessCommunicationCluster:
         default=8000, metadata={"description": "Size of one packet in bit."}
     )
 
-    T: int = attrs.field(
+    T: float = attrs.field(
         default=1e-3, metadata={"description": "Time duration of one step in seconds."}
     )
 
@@ -140,6 +140,8 @@ class WirelessCommunicationCluster:
         default=pow(10, -169 / 10) * 1e-3,
         metadata={"description": "Noise power at device sides (-169 dBm/Hz)."},
     )
+
+    rng: np.random.Generator | None = attrs.field(default=None)
 
     W_sub: float = attrs.field(init=False)
     W_mw: float = attrs.field(init=False)
@@ -188,6 +190,18 @@ class WirelessCommunicationCluster:
         },
     )
 
+    baseline_rate_estimate: str = attrs.field(
+        default="window",
+        metadata={
+            "description": "Rate used by RAQL/DQN in the packet bound (15): 'window' = mean achieved rate over "
+            "the last `packet_loss_rate_time_window` frames (0 when unused), 'average' = mean rate over all "
+            "frames in which the link was used so far, without forgetting (the 'known average rate' of (15) "
+            "in Dinh et al.)."
+        },
+    )
+    used_rate_average: np.ndarray = attrs.field(init=False)
+    used_rate_count: np.ndarray = attrs.field(init=False)
+
     estimated_ideal_power: np.ndarray = attrs.field(init=False)
     per_device_interference: np.ndarray = attrs.field(init=False)
 
@@ -197,15 +211,15 @@ class WirelessCommunicationCluster:
         """
         self.W_sub = self.W_sub_total / self.n_sub_channels
         self.W_mw = self.W_mw_total / self.n_beams
-        assert (
-            self.num_devices == self.device_positions.shape[0]
-        ), f"Number of devices ({self.num_devices}) doesn't match the shape of device positions ({self.device_positions.shape})"
-        assert (
-            self.num_sub_channel <= self.h_tilde.shape[-1]
-        ), "Number of subchannel doesn't match the shape of h_tilde"
-        assert (
-            self.num_beam <= self.h_tilde.shape[-1]
-        ), "Number of beam doesn't match the shape of h_tilde"
+        assert self.num_devices == self.device_positions.shape[0], (
+            f"Number of devices ({self.num_devices}) doesn't match the shape of device positions ({self.device_positions.shape})"
+        )
+        assert self.num_sub_channel <= self.h_tilde.shape[-1], (
+            "Number of subchannel doesn't match the shape of h_tilde"
+        )
+        assert self.num_beam <= self.h_tilde.shape[-1], (
+            "Number of beam doesn't match the shape of h_tilde"
+        )
 
         self.distance_to_AP = np.linalg.norm(
             self.device_positions - self.AP_position, axis=1
@@ -290,6 +304,9 @@ class WirelessCommunicationCluster:
             ]
         )
 
+        self.used_rate_average = np.zeros(shape=(self.num_devices, 2))
+        self.used_rate_count = np.zeros(shape=(self.num_devices, 2))
+
         self.estimated_ideal_power = np.zeros(
             shape=(self.num_devices, 2)
         )  # Unit: Percentage
@@ -301,67 +318,93 @@ class WirelessCommunicationCluster:
         scenario_name: str,
         num_cluster: int,
         num_device: int,
+        data_dir: str | None = None,
     ):
         """
         Generate AP, IoT devices and obstacles positions
         They are fixed for now
         """
+        print("Generating APs, devices, and obstacles positions...")
+
         clusters = []
-        clusters.append(
-            {
-                "AP": [100.0, 100.0],
-                "devices": [[120.0, 100.0], [100.0, 120.0], [15.0, 20.0]],
-                "obstacles": [[[90.0, 110.0], [110.0, 110.0]]],
-            }
-        )
-        clusters.append(
-            {
-                "AP": [-100.0, 100.0],
-                "devices": [[-80.0, 100.0], [-100.0, 120.0], [-185.0, 20.0]],
-                "obstacles": [[[-90.0, 110.0], [-110.0, 110.0]]],
-            }
-        )
-        clusters.append(
-            {
-                "AP": [-100.0, -100.0],
-                "devices": [[-80.0, -100.0], [-100.0, -80.0], [-185.0, -180.0]],
-                "obstacles": [[[-90.0, -90.0], [-110.0, -90.0]]],
-            }
-        )
-        clusters.append(
-            {
-                "AP": [100.0, -100.0],
-                "devices": [[80.0, -100.0], [100.0, -80.0], [15.0, -180.0]],
-                "obstacles": [[[110.0, -90.0], [90.0, -90.0]]],
-            }
-        )
+        AP_positions = [
+            [100.0, 100.0],
+            [-100.0, 100.0],
+            [-100.0, -100.0],
+            [100.0, -100.0],
+        ]
+        respective_device_positions = [
+            [20, 0],  # Device 1
+            [0, 20],  # Device 2
+            [-85, -80],  # Device 3
+            [-45, 40],  # Device 4
+            [10, -70],  # Device 5
+            [-40, -20],  # Device 6
+            [-40, 15],  # Device 7
+            [60, 55],  # Device 8
+            [45, 5],  # Device 9
+            [50, -40],  # Device 10
+            [40, 60],  # Device 11
+            [-20, -60],  # Device 12
+            [-20, 80],  # Device 13
+            [20, -40],  # Device 14
+            [-80, 80],  # Device 15
+        ]
+        respective_obstacle_positions = [[[-0.5, 10.0], [0.5, 10.0]]]
+
+        for i in range(num_cluster):
+            ap = AP_positions[i]
+            clusters.append(
+                {
+                    "AP": ap,
+                    "devices": [
+                        (np.array(ap) + np.array(d)).tolist()
+                        for d in respective_device_positions[:num_device]
+                    ],
+                    "obstacles": [
+                        [
+                            (np.array(ap) + np.array(o[0])).tolist(),
+                            (np.array(ap) + np.array(o[1])).tolist(),
+                        ]
+                        for o in respective_obstacle_positions
+                    ],
+                }
+            )
 
         if num_cluster > 4:
             raise NotImplementedError("Supported upto 4 APs only!")
 
         for i in range(num_cluster):
-
-            AP_pos = clusters[i]["AP"]
+            AP_positions = clusters[i]["AP"]
             for k in range(num_device):
-
-                if k >= 3:
+                if k >= 15:
                     clusters[i]["devices"].append(
                         [
                             np.random.randint(
-                                AP_pos[0] - AP_RANGE / 2, AP_pos[1] - AP_RANGE / 2
-                            ),
+                                AP_positions[0] - AP_RANGE / 2,
+                                AP_positions[1] - AP_RANGE / 2,
+                            ).tolist(),
                             np.random.randint(
-                                AP_pos[1] - AP_RANGE / 2, AP_pos[1] - AP_RANGE / 2
-                            ),
+                                AP_positions[1] - AP_RANGE / 2,
+                                AP_positions[1] - AP_RANGE / 2,
+                            ).tolist(),
                         ]
                     )
 
             save_path = os.path.join(
-                BASE_DIR, "data", scenario_name, f"cluster_{i}", "positions.json"
+                data_root(data_dir), scenario_name, f"cluster_{i}", "positions.json"
             )
 
-            with open(save_path, "wt", encoding="utf-8") as file:
-                json.dump(clusters[i], file, indent=4)
+            try:
+                with open(save_path, "wt", encoding="utf-8") as file:
+                    json.dump(clusters[i], file, indent=4)
+                    print(
+                        f"Saved APs, devices, and obstacles positions of cluster {i} at \n{save_path}"
+                    )
+            except Exception as e:
+                print(
+                    f"Error occured when trying to save APs, devices, and obstacles positions: {e}"
+                )
 
     @classmethod
     def generate_h_tilde(
@@ -375,14 +418,17 @@ class WirelessCommunicationCluster:
         mu: float,
         sigma: float,
         seed: int,
+        data_dir: str | None = None,
     ):
         """
         Generate channel power gain for all IoT devices and subchannel/beam pair
         Array of generated complex channel coefficients with shape (num_AP, num_timestep, 2, num_device, num_subchannel + num_beam).
         """
+        print("Generating channel power gain...")
+
         for i in range(num_cluster):
             save_path = os.path.join(
-                BASE_DIR, "data", scenario_name, f"cluster_{i}", "h_tilde.pickle"
+                data_root(data_dir), scenario_name, f"cluster_{i}", "h_tilde.pickle"
             )
 
             h = []
@@ -403,8 +449,12 @@ class WirelessCommunicationCluster:
 
             h = np.array(h)
 
-            with open(save_path, "wb") as file:
-                pickle.dump(h, file)
+            try:
+                with open(save_path, "wb") as file:
+                    pickle.dump(h, file)
+                print(f"Saved channel power gain of cluster {i} at \n{save_path}")
+            except Exception as e:
+                print(f"Error occured when trying to save channel power gain: {e}")
 
     @classmethod
     def generate_data(
@@ -418,12 +468,16 @@ class WirelessCommunicationCluster:
         mu: float = 0,
         sigma: float = 1,
         seed: int = 1,
+        data_dir: str | None = None,
     ):
+        """Generate a scenario under the data root (see `multi_agent_power_allocation.data`)."""
         for i in range(num_cluster):
             os.makedirs(
-                os.path.join(BASE_DIR, "data", scenario_name, f"cluster_{i}"),
+                os.path.join(data_root(data_dir), scenario_name, f"cluster_{i}"),
                 exist_ok=True,
             )
+
+        cls.generate_postitions(scenario_name, num_cluster, num_device, data_dir)
 
         cls.generate_h_tilde(
             scenario_name,
@@ -435,8 +489,8 @@ class WirelessCommunicationCluster:
             mu,
             sigma,
             seed,
+            data_dir,
         )
-        cls.generate_postitions(scenario_name, num_cluster, num_device)
 
     def set_num_send_packet(self, num_send_packet: np.ndarray):
         self.num_send_packet = num_send_packet.copy()
@@ -474,16 +528,26 @@ class WirelessCommunicationCluster:
 
         for k in range(self.num_devices):
             if self.num_send_packet[k, 0] > 0 and self.num_send_packet[k, 1] == 0:
-                rand_index = int(np.random.randint(0, len(rand_sub)))
+                if self.rng is None:
+                    rand_index = int(np.random.randint(0, len(rand_sub)))
+                else:
+                    rand_index = int(self.rng.integers(0, len(rand_sub)))
                 sub[k] = rand_sub[rand_index]
                 rand_sub.pop(rand_index)
             elif self.num_send_packet[k, 0] == 0 and self.num_send_packet[k, 1] > 0:
-                rand_index = int(np.random.randint(0, len(rand_mW)))
+                if self.rng is None:
+                    rand_index = int(np.random.randint(0, len(rand_mW)))
+                else:
+                    rand_index = int(self.rng.integers(0, len(rand_mW)))
                 mW[k] = rand_mW[rand_index]
                 rand_mW.pop(rand_index)
             else:
-                rand_sub_index = int(np.random.randint(0, len(rand_sub)))
-                rand_mW_index = int(np.random.randint(0, len(rand_mW)))
+                if self.rng is None:
+                    rand_sub_index = int(np.random.randint(0, len(rand_sub)))
+                    rand_mW_index = int(np.random.randint(0, len(rand_mW)))
+                else:
+                    rand_sub_index = int(self.rng.integers(0, len(rand_sub)))
+                    rand_mW_index = int(self.rng.integers(0, len(rand_mW)))
 
                 sub[k] = rand_sub[rand_sub_index]
                 mW[k] = rand_mW[rand_mW_index]
@@ -647,6 +711,11 @@ class WirelessCommunicationCluster:
     def update_average_rate_stacked(self):
         self.average_rate_stacked[1:] = self.average_rate_stacked[:-1]
         self.average_rate_stacked[0] = self.instant_rate
+        used = self.num_send_packet > 0
+        self.used_rate_count[used] += 1
+        self.used_rate_average[used] += (
+            self.instant_rate[used] - self.used_rate_average[used]
+        ) / self.used_rate_count[used]
 
     def update_packet_loss_rate(self):
         """
@@ -751,11 +820,19 @@ class WirelessCommunicationCluster:
         -------
         None
         """
-        l = np.multiply(self.average_rate_stacked.mean(axis=0), self.T / self.D)
+        num_packets = np.multiply(
+            self.average_rate_stacked.mean(axis=0), self.T / self.D
+        )
         if isinstance(algorithm, Algorithms.RAQL.value) or isinstance(
             algorithm, Algorithms.DQN.value
         ):
-            l_max_estimate = np.floor(l)
+            if self.baseline_rate_estimate == "average":
+                # Never-used links get L_max: no information yet, as for an unknown link
+                average_rate = np.where(
+                    self.used_rate_count > 0, self.used_rate_average, np.inf
+                )
+                num_packets = np.minimum(average_rate * self.T / self.D, self.L_max)
+            l_max_estimate = np.floor(num_packets)
         elif (
             isinstance(algorithm, Algorithms.SACPA.value)
             or isinstance(algorithm, Algorithms.SACPF.value)
@@ -764,10 +841,10 @@ class WirelessCommunicationCluster:
             packet_successful_rate = np.ones(
                 shape=(self.num_devices, 2)
             ) - self.packet_loss_rate_stacked.mean(axis=0)
-            l_max_estimate = np.floor(l * packet_successful_rate)
+            l_max_estimate = np.floor(num_packets * packet_successful_rate)
 
             # After a long time of not sending via one interface,
-            # the average rate drop so much that `l` becomes 0.0, eventhough the packet successful rate is 1.0
+            # the average rate drop so much that `num_packets` becomes 0.0, eventhough the packet successful rate is 1.0
             # This prevents under-use of interfaces and improve exploration of the policy
             packet_successful_rate_warm_up_threshold = 1.0
             indx = np.where(
@@ -838,7 +915,7 @@ class WirelessCommunicationCluster:
             :, 1
         ].sum() / (self.num_devices)
         info[f"{prefix}/ Overall/ Average rate/ Global"] = (
-            info[f"{prefix}/ Overall/ Average rate/ mmWave"]
+            info[f"{prefix}/ Overall/ Average rate/ Sub6GHz"]
             + info[f"{prefix}/ Overall/ Average rate/ mmWave"]
         )
         info[f"{prefix}/ Overall/ Power usage"] = self.transmit_power.sum()
@@ -848,69 +925,71 @@ class WirelessCommunicationCluster:
         )
 
         for k in range(self.num_devices):
-            info[f"{prefix}/ Device {k+1}/ Num. Sent packet/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Sent packet/ Sub6GHz"] = (
                 self.num_send_packet[k, 0]
             )
-            info[f"{prefix}/ Device {k+1}/ Num. Sent packet/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Sent packet/ mmWave"] = (
                 self.num_send_packet[k, 1]
             )
 
-            info[f"{prefix}/ Device {k+1}/ Num. Received packet/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Received packet/ Sub6GHz"] = (
                 self.num_received_packet[k, 0]
             )
-            info[f"{prefix}/ Device {k+1}/ Num. Received packet/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Received packet/ mmWave"] = (
                 self.num_received_packet[k, 1]
             )
 
-            info[f"{prefix}/ Device {k+1}/ Num. Dropped packet/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Dropped packet/ Sub6GHz"] = (
                 self.num_send_packet[k, 0] - self.num_received_packet[k, 0]
             )
-            info[f"{prefix}/ Device {k+1}/ Num. Dropped packet/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Num. Dropped packet/ mmWave"] = (
                 self.num_send_packet[k, 1] - self.num_received_packet[k, 1]
             )
 
-            info[f"{prefix}/ Device {k+1}/ Power/ Sub6GHz"] = self.transmit_power[k, 0]
-            info[f"{prefix}/ Device {k+1}/ Power/ mmWave"] = self.transmit_power[k, 1]
-
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate/ Global"] = (
-                self.global_packet_loss_rate[k]
-            )
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate/ Sub6GHz"] = (
-                self.packet_loss_rate[k, 0]
-            )
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate/ mmWave"] = (
-                self.packet_loss_rate[k, 1]
-            )
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate time window/ Sub6GHz"] = (
-                self.packet_loss_rate_stacked[:, k, 0].mean()
-            )
-            info[f"{prefix}/ Device {k+1}/ Packet loss rate time window/ mmWave"] = (
-                self.packet_loss_rate_stacked[:, k, 1].mean()
-            )
-            info[f"{prefix}/ Device {k+1}/ Average rate/ Sub6GHz"] = self.average_rate[
+            info[f"{prefix}/ Device {k + 1}/ Power/ Sub6GHz"] = self.transmit_power[
                 k, 0
             ]
-            info[f"{prefix}/ Device {k+1}/ Average rate/ mmWave"] = self.average_rate[
+            info[f"{prefix}/ Device {k + 1}/ Power/ mmWave"] = self.transmit_power[k, 1]
+
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate/ Global"] = (
+                self.global_packet_loss_rate[k]
+            )
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate/ Sub6GHz"] = (
+                self.packet_loss_rate[k, 0]
+            )
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate/ mmWave"] = (
+                self.packet_loss_rate[k, 1]
+            )
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate time window/ Sub6GHz"] = (
+                self.packet_loss_rate_stacked[:, k, 0].mean()
+            )
+            info[f"{prefix}/ Device {k + 1}/ Packet loss rate time window/ mmWave"] = (
+                self.packet_loss_rate_stacked[:, k, 1].mean()
+            )
+            info[f"{prefix}/ Device {k + 1}/ Average rate/ Sub6GHz"] = (
+                self.average_rate[k, 0]
+            )
+            info[f"{prefix}/ Device {k + 1}/ Average rate/ mmWave"] = self.average_rate[
                 k, 1
             ]
-            info[f"{prefix}/ Device {k+1}/ Average rate time window/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Average rate time window/ Sub6GHz"] = (
                 self.average_rate_stacked[:, k, 0].mean()
             )
-            info[f"{prefix}/ Device {k+1}/ Average rate time window/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Average rate time window/ mmWave"] = (
                 self.average_rate_stacked[:, k, 1].mean()
             )
-            info[f"{prefix}/ Device {k+1}/ Interference/ Sub6GHz"] = (
+            info[f"{prefix}/ Device {k + 1}/ Interference/ Sub6GHz"] = (
                 self.per_device_interference[k, 0]
             )
-            info[f"{prefix}/ Device {k+1}/ Interference/ mmWave"] = (
+            info[f"{prefix}/ Device {k + 1}/ Interference/ mmWave"] = (
                 self.per_device_interference[k, 1]
             )
 
             if hasattr(self, "estimated_ideal_power"):
-                info[f"{prefix}/ Device {k+1}/ Estimated ideal power/ Sub6GHz"] = (
+                info[f"{prefix}/ Device {k + 1}/ Estimated ideal power/ Sub6GHz"] = (
                     self.estimated_ideal_power[k, 0]
                 )
-                info[f"{prefix}/ Device {k+1}/ Estimated ideal power/ mmWave"] = (
+                info[f"{prefix}/ Device {k + 1}/ Estimated ideal power/ mmWave"] = (
                     self.estimated_ideal_power[k, 1]
                 )
 
@@ -940,11 +1019,12 @@ class WirelessCommunicationCluster:
         self.instant_rate = self._init_rate.copy()
         self.average_rate_stacked = np.zeros_like(self.average_rate_stacked)
         self.average_rate_stacked[:, ...] = self._init_rate.copy()
-        self.num_send_packet = self._init_num_send_packet
-        self.num_sent_packet_acc = self._init_num_send_packet
-        self.num_received_packet = self._init_num_received_packet
-        self.num_received_packet_acc = self._init_num_received_packet
-        self.transmit_power = self._init_transmit_power
+        # Copies: the accumulators are updated in place in `step()`
+        self.num_send_packet = self._init_num_send_packet.copy()
+        self.num_sent_packet_acc = self._init_num_send_packet.copy()
+        self.num_received_packet = self._init_num_received_packet.copy()
+        self.num_received_packet_acc = self._init_num_received_packet.copy()
+        self.transmit_power = self._init_transmit_power.copy()
         self.packet_loss_rate = np.zeros(shape=(self.num_devices, 2))
         self.global_packet_loss_rate = np.zeros(shape=(self.num_devices))
         self.sum_packet_loss_rate = 0

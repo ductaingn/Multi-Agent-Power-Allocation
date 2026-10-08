@@ -1,8 +1,9 @@
 env_config:
-  algorithm_list: ["RAQL", "RAQL", "RAQL", "RAQL"] #Literal["SACPA, SACPF, RAQL, Random, DQN"]
+  algorithm_list: ["SACPA", "SACPA", "SACPA", "SACPA"] #Literal["SACPA, SACPF, RAQL, Random, DQN"]
   # render_mode: "human"
   num_cluster: 4
   max_num_step: 10000
+  dynamic_obstacles: False
   seed: 1
   
   reward_coef:
@@ -16,6 +17,10 @@ env_config:
     num_beam: 5
     L_max: 10
     packet_loss_rate_time_window: 100
+    # Total transmit power budget per AP, in dBm.
+    # NOTE: before the dBm->W fix, `10` here was converted to sqrt(10) mW, i.e. 5 dBm.
+    # Use 5 to reproduce the runs named "... 10 dBm ...".
+    P_sum: 5 # dBm
 
 model_config:
   latent_dim: 256
@@ -25,6 +30,20 @@ n_warm_up_step: 100
 
 wandb_config:
   project: "PowerAllocationMARL"
+  # entity: "<team or user>"
+
+checkpoint_config:
+  enabled: true
+  save_dir: "checkpoints"   # checkpoints of a run go to <save_dir>/<run name>/
+  save_freq: 5000           # env steps between periodic saves (0 disables)
+  keep_last: 2              # periodic checkpoints kept on disk
+  save_best: true           # keep the checkpoint with the best mean reward over the last `save_freq` steps
+  upload_to_wandb: false    # log the final checkpoint folder as a WandB model artifact
+  push_to_hub: false        # push the checkpoint folder to the Hugging Face Hub at the end of training
+  hf_repo_id: null          # e.g. "<hf user>/sacra-power-allocation" (required if push_to_hub)
+  hf_private: true
+  hf_push_every_save: false # also push each periodic checkpoint (handy on Kaggle)
+  hf_token_env: "HF_TOKEN"  # env var with the HF token; falls back to `huggingface-cli login`
 
 SAC_config:
   gamma: 0.99

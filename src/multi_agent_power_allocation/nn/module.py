@@ -1,11 +1,8 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-import numpy as np
-
-from gymnasium.spaces import Space, Discrete
-
+from gymnasium.spaces import Discrete, Space
 
 # CAP the standard deviation of the actor
 LOG_STD_MAX = 2

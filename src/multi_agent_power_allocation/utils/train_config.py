@@ -1,34 +1,70 @@
+import json
 import os
+import pickle
+from copy import deepcopy
 from typing import Dict, List
 
-import pickle
-import json
-import yaml
-
 import attrs
-
 import numpy as np
-
 import torch
+import yaml
 from torch.optim import Adam
 
 # from torch.optim.lr_scheduler import CosineAnnealingLR
-
-from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
-from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic, DQNQNetwork
-from multi_agent_power_allocation.algorithms.low_level import (
-    SAC,
-    RAQL,
-    Random,
-    DQN,
-)
 from multi_agent_power_allocation.algorithms.high_level import Algorithm
+from multi_agent_power_allocation.algorithms.low_level import (
+    DQN,
+    RAQL,
+    SAC,
+    Random,
+)
+from multi_agent_power_allocation.data import scenario_dir
+from multi_agent_power_allocation.nn.module import DQNQNetwork, SACPAACtor, SACPACritic
+
+
+def load_config(config_file_path: str, overrides: List[str] | None = None) -> Dict:
+    """
+    Load a YAML config and apply `dotted.key=value` overrides, e.g.
+    `env_config.seed=3` or `env_config.algorithm_list=[SACPA,SACPA,SACPA,SACPA]`.
+    Values are parsed as YAML so numbers, booleans, lists and null work as expected.
+    """
+    with open(config_file_path, "rb") as file:
+        config: Dict = yaml.safe_load(file)
+
+    for override in overrides or []:
+        if "=" not in override:
+            raise ValueError(
+                f"Override must look like `key.subkey=value`, got `{override}`"
+            )
+        dotted_key, raw_value = override.split("=", 1)
+        *parents, leaf = dotted_key.split(".")
+        node = config
+        for key in parents:
+            node = node.setdefault(key, {})
+        value = yaml.safe_load(raw_value)
+        if isinstance(value, str):
+            try:  # YAML 1.1 reads "1e-3" as a string
+                value = float(value)
+            except ValueError:
+                pass
+        node[leaf] = value
+
+    return config
+
+
+def dbm_to_watt(p_dbm: float) -> float:
+    return 10 ** (p_dbm / 10) * 1e-3
 
 
 @attrs.define
 class TrainConfig:
-    config_file_path: str
+    config_file_path: str | None = None
+    rng: np.random.Generator | None = attrs.field(default=None, kw_only=True)
+    config_dict: Dict | None = attrs.field(default=None, kw_only=True)
+    raw_config: Dict = attrs.field(init=False)
+    checkpoint_config: Dict = attrs.field(init=False)
+    baseline_full_power: bool = attrs.field(init=False)
     model_config: Dict = attrs.field(init=False)
     env_config: Dict = attrs.field(init=False)
     num_cluster: int = attrs.field(init=False)
@@ -37,38 +73,33 @@ class TrainConfig:
     wandb_config: Dict = attrs.field(init=False)
     SAC_config: Dict = attrs.field(init=False)
     device: str = attrs.field(init=False)
+    seed: int | None = attrs.field(init=False)
 
     def __attrs_post_init__(self):
-        try:
-            with open(self.config_file_path, "rb") as file:
-                config: Dict = yaml.safe_load(file)
-        except FileExistsError as e:
-            print("Error occured when trying to open default config file!")
-            print(e)
+        if self.config_dict is not None:
+            config: Dict = deepcopy(self.config_dict)
+        elif self.config_file_path is not None:
+            config = load_config(self.config_file_path)
+        else:
+            raise ValueError("Either `config_file_path` or `config_dict` must be given")
+        # Plain copy of the YAML config: light enough for WandB and checkpoint metadata
+        self.raw_config = deepcopy(config)
+        self.checkpoint_config = config.get("checkpoint_config") or {}
 
         model_config: Dict = config.get("model_config")
         env_config: Dict = config.get("env_config")
         wc_cluster_config: Dict = env_config.get("wc_cluster_config")
         num_cluster: int = env_config["num_cluster"]
+        # Not an environment argument: where the scenarios are (see `data.py`)
+        data_path = scenario_dir(
+            wc_cluster_config["scenario"], env_config.pop("data_dir", None)
+        )
 
         parsed_wc_clusters_configs = []
         obstacles_positions = []
         for i in range(num_cluster):
-            h_tilde_path = os.path.join(
-                BASE_DIR,
-                "data",
-                wc_cluster_config["scenario"],
-                f"cluster_{i}",
-                "h_tilde.pickle",
-            )
-
-            positions_path = os.path.join(
-                BASE_DIR,
-                "data",
-                wc_cluster_config["scenario"],
-                f"cluster_{i}",
-                "positions.json",
-            )
+            h_tilde_path = os.path.join(data_path, f"cluster_{i}", "h_tilde.pickle")
+            positions_path = os.path.join(data_path, f"cluster_{i}", "positions.json")
 
             if not os.path.isfile(h_tilde_path):
                 raise FileNotFoundError(f"`h_tilde` path is not valid!: {h_tilde_path}")
@@ -95,6 +126,10 @@ class TrainConfig:
                     "packet_loss_rate_time_window": wc_cluster_config[
                         "packet_loss_rate_time_window"
                     ],
+                    "P_sum": dbm_to_watt(wc_cluster_config["P_sum"]),
+                    "baseline_rate_estimate": wc_cluster_config.get(
+                        "baseline_rate_estimate", "window"
+                    ),
                 }
             )
 
@@ -109,6 +144,8 @@ class TrainConfig:
         env_config.update({"n_warm_up_step": config.get("n_warm_up_step")})
         env_config.update({"wc_clusters_configs": parsed_wc_clusters_configs})
 
+        # Not an environment argument: consumed by `get_algorithm_mapping`
+        self.baseline_full_power = bool(env_config.pop("baseline_full_power", False))
         algorithm_list: List[str] = env_config.pop("algorithm_list")
         if len(algorithm_list) != num_cluster:
             raise ValueError(
@@ -137,10 +174,13 @@ class TrainConfig:
         self.SAC_config = config.get("SAC_config")
         self.n_warm_up_step = config.get("n_warm_up_step")
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.seed = env_config.get("seed", None)
 
         algorithm_mapping = self.get_algorithm_mapping(env_config)
         env_config.pop("algorithm_list")
         env_config.update({"algorithm_mapping": algorithm_mapping})
+        # Pass the Generator to the environment
+        env_config.update({"rng": self.rng})
         self.env_config = env_config
 
     def get_algorithm_mapping(self, env_config: Dict) -> Dict[str, Algorithm]:
@@ -156,6 +196,8 @@ class TrainConfig:
             action_space = algorithm_cls.value.action_space(
                 env_config["wc_clusters_configs"][agent_id]["num_devices"]
             )
+            if self.seed is not None:
+                action_space.seed(self.seed + agent_id)
 
             if algorithm_cls == Algorithms.SACPA or algorithm_cls == Algorithms.SACPF:
                 actor = SACPAACtor(
@@ -214,7 +256,14 @@ class TrainConfig:
                     )
                 )
             elif algorithm_cls == Algorithms.RAQL:
-                policy = algorithm_cls.value(RAQL(action_space))
+                if self.rng is not None:
+                    rng = np.random.default_rng(self.rng.integers(0, 2**31))
+                else:
+                    rng = None
+                policy = algorithm_cls.value(
+                    RAQL(action_space, rng=rng),
+                    full_power_budget=self.baseline_full_power,
+                )
             elif algorithm_cls == Algorithms.RANDOM:
                 policy = algorithm_cls.value(Random(action_space))
             elif algorithm_cls == Algorithms.DQN:
@@ -223,7 +272,10 @@ class TrainConfig:
                 )
                 q_net_optim = Adam(q_net.parameters(), lr=self.SAC_config["lr"])
 
-                policy = algorithm_cls.value(DQN(q_net, q_net_optim, action_space))
+                policy = algorithm_cls.value(
+                    DQN(q_net, q_net_optim, action_space),
+                    full_power_budget=self.baseline_full_power,
+                )
             else:
                 raise NotImplementedError
 

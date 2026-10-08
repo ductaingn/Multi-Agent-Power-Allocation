@@ -1,4 +1,5 @@
 __pycache__
+pytest_cache/
 .vscode
 .venv
 dist
@@ -7,3 +8,6 @@ dist
 wandb
 debug.py
 *.egg-info
+.old
+checkpoints/
+/data/

@@ -1,16 +1,15 @@
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
 import attrs
-
 import numpy as np
-
 import torch
-
-from gymnasium.spaces import Space, Box, Discrete
+from gymnasium.spaces import Box, Discrete, Space
 
 from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm import (
     Algorithm,
+    CumulativeQoSReward,
     Reward,
+    full_budget_power,
 )
 from multi_agent_power_allocation.algorithms.low_level.dqn import DQN as LLDQN
 
@@ -23,11 +22,19 @@ if TYPE_CHECKING:
 @attrs.define
 class DQN(Algorithm):
     low_level_algorithm: LLDQN
-    num_iot_devices: int
+    # False: every active link gets P_sum / (N + M) as in the original RAQL paper.
+    # True: the whole budget is used, split like SACPF (fairer power comparison).
+    full_power_budget: bool = attrs.field(default=False, kw_only=True)
+    reward_fn: CumulativeQoSReward = attrs.field(
+        init=False, factory=CumulativeQoSReward
+    )
+    num_iot_devices: int = attrs.field(init=False)
     interface_hash_map: Dict[int, np.ndarray] = attrs.field(init=False)
 
-    @interface_hash_map.default
-    def _interface_hash_map_factory(self):
+    def __attrs_post_init__(self):
+        self.num_iot_devices = round(
+            np.log(self.low_level_algorithm.action_space.n) / np.log(3)
+        )
         grids = np.meshgrid(*[np.arange(3)] * self.num_iot_devices, indexing="ij")
         states = (
             np.stack(grids, axis=0).reshape(self.num_iot_devices, -1).T
@@ -37,7 +44,7 @@ class DQN(Algorithm):
         values = states[:, ::-1].copy()
         hash_map = {i: values[i] for i in range(values.shape[0])}
 
-        return hash_map
+        self.interface_hash_map = hash_map
 
     @classmethod
     def observation_space(  # pylint: disable=W0221
@@ -52,25 +59,25 @@ class DQN(Algorithm):
         return Box(
             low=np.array(
                 [
-                    np.zeros((num_iot_devices), dtype=int),
-                    np.zeros((num_iot_devices), dtype=int),
-                    np.zeros((num_iot_devices), dtype=int),
-                    np.zeros((num_iot_devices), dtype=int),
+                    np.zeros((num_iot_devices), dtype=np.float32),
+                    np.zeros((num_iot_devices), dtype=np.float32),
+                    np.zeros((num_iot_devices), dtype=np.float32),
+                    np.zeros((num_iot_devices), dtype=np.float32),
                 ]
             )
             .transpose()
             .flatten(),
             high=np.array(
                 [
-                    np.ones((num_iot_devices), dtype=int),
-                    np.ones((num_iot_devices), dtype=int),
-                    np.full((num_iot_devices), fill_value=L_max, dtype=int),
-                    np.full((num_iot_devices), fill_value=L_max, dtype=int),
+                    np.ones((num_iot_devices), dtype=np.float32),
+                    np.ones((num_iot_devices), dtype=np.float32),
+                    np.full((num_iot_devices), fill_value=L_max, dtype=np.float32),
+                    np.full((num_iot_devices), fill_value=L_max, dtype=np.float32),
                 ]
             )
             .transpose()
             .flatten(),
-            dtype=int,
+            dtype=np.float32,
         )
 
     @classmethod
@@ -158,6 +165,9 @@ class DQN(Algorithm):
                 if number_of_send_packet[k, 1] == 0:
                     power[k, 1] = 0
 
+        if self.full_power_budget:
+            power = full_budget_power(number_of_send_packet)
+
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)
 
@@ -167,39 +177,4 @@ class DQN(Algorithm):
         prev_reward_qos: float,
         reward_coef: Dict[str, float],
     ) -> Reward:
-        reward_qos = 0.0
-
-        for k in range(wc_cluster.num_devices):
-            qos_satisfaction = (
-                wc_cluster.packet_loss_rate[k, 0] < wc_cluster.qos_threshold,
-                wc_cluster.packet_loss_rate[k, 1] < wc_cluster.qos_threshold,
-            )
-
-            num_received_packet = (
-                wc_cluster.num_received_packet[k, 0],
-                wc_cluster.num_received_packet[k, 1],
-            )
-
-            num_send_packet = (
-                wc_cluster.num_send_packet[k, 0],
-                wc_cluster.num_send_packet[k, 1],
-            )
-
-            reward_qos += (
-                (num_received_packet[0] + num_received_packet[1])
-                / (num_send_packet[0] + num_send_packet[1])
-                - (1 - qos_satisfaction[0])
-                - (1 - qos_satisfaction[1])
-            )
-        reward_qos = (
-            (wc_cluster.current_step - 1) * prev_reward_qos + reward_qos
-        ) / wc_cluster.current_step
-
-        instance_reward = reward_coef["reward_qos"] * reward_qos
-
-        return Reward(
-            reward_sum=instance_reward,
-            reward_components={
-                "reward_qos": reward_qos,
-            },
-        )
+        return self.reward_fn(wc_cluster, reward_coef)

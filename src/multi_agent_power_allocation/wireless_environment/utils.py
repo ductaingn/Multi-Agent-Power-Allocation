@@ -3,8 +3,6 @@ Utility functions for wireless environment simulation.
 This module provides functions to generate device positions, compute path loss, rates, e.t.c.
 """
 
-from typing import Union
-
 import pickle
 
 import numpy as np
@@ -147,10 +145,8 @@ def generate_h_tilde_device_channel(amount: int, mu: float, sigma: float) -> np.
     """
     re = np.random.normal(mu, sigma, amount)
     im = np.random.normal(mu, sigma, amount)
-    h_tilde = []
-    for i in range(amount):
-        h_tilde.append(complex(re[i], im[i]) / np.sqrt(2))
-    return np.array(h_tilde)
+    # Same values as `complex(re, im) / np.sqrt(2)` element-wise, but vectorized
+    return re / np.sqrt(2) + 1j * (im / np.sqrt(2))
 
 
 def generate_h_tilde(
@@ -289,9 +285,7 @@ def signal_power(p: float, h: float) -> float:
     return p * h
 
 
-def gamma(
-    w: float, s: float, interference: float, noise: float
-) -> Union[float, list[float, float]]:
+def gamma(w: float, s: float, interference: float, noise: float) -> float:
     """
     Calculate the signal-to-noise ratio (SNR).
 
@@ -305,8 +299,6 @@ def gamma(
         Interference from other devices.
     noise : float
         Noise power.
-    return_power : bool
-        Indicate whether to return power or not.
 
     Returns
     -------
@@ -342,19 +334,7 @@ def compute_rate(w: float, sinr: float) -> float:
     return rate
 
 
-def on_segment(p, q, r) -> bool:
-    """
-    Checks if point q lies on the line segment pr.
-    p, q, and r are NumPy arrays of shape (2,).
-    """
-    return np.all(q >= np.minimum(p, r)) and np.all(q <= np.maximum(p, r))
-
-
-def cross2d(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
-
-
-def segments_intersect(s1, s2) -> bool:
+def segments_intersect(s1: np.ndarray, s2: np.ndarray) -> bool:
     """
     Check if two segment intersect
 
@@ -369,35 +349,33 @@ def segments_intersect(s1, s2) -> bool:
         bool
             True if two segments intersect
     """
-
     p1, p2 = s1[0], s1[1]
     p3, p4 = s2[0], s2[1]
 
-    def direction(a, b, c):
-        return cross2d(c - a, b - a)
+    x1, y1 = p1
+    x2, y2 = p2
+    x3, y3 = p3
+    x4, y4 = p4
+    denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1)
+    if denom == 0:  # parallel
+        return False
+    ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denom
+    if ua < 0 or ua > 1:  # out of range
+        return False
+    ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denom
+    if ub < 0 or ub > 1:  # out of range
+        return False
 
-    d1 = direction(p1, p2, p3)
-    d2 = direction(p1, p2, p4)
-    d3 = direction(p3, p4, p1)
-    d4 = direction(p3, p4, p2)
+    # # Intersection
+    # x = x1 + ua * (x2-x1)
+    # y = y1 + ua * (y2-y1)
 
-    # Proper intersection (general case)
-    if (d1 * d2 < 0) and (d3 * d4 < 0):
-        return True
-
-    if d1 == 0 and on_segment(p1, p2, p3):
-        return True
-    if d2 == 0 and on_segment(p1, p2, p4):
-        return True
-    if d3 == 0 and on_segment(p3, p4, p1):
-        return True
-    if d4 == 0 and on_segment(p3, p4, p2):
-        return True
-
-    return False
+    return True
 
 
-def rotate_points(points, angle_degrees, origin=(0, 0)):
+def rotate_points(
+    points: np.ndarray, angle_degrees: float, origin: tuple[float, float] = (0, 0)
+):
     """
     Rotate 2D points around a given origin by a specified angle.
 

@@ -1,13 +1,10 @@
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
 import attrs
-
 import numpy as np
-
 import torch
+from gymnasium.spaces import Box, Space
 from torch.nn.functional import softmax
-
-from gymnasium.spaces import Space, Box
 
 from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm import (
     Algorithm,
@@ -225,7 +222,7 @@ class SACPA(Algorithm):
     ) -> Reward:
         def estimate_ideal_power(num_send_packet, CGINR, W):
             if CGINR == 0:
-                return 1.0
+                return 0.0
 
             ideal_power = (
                 2 ** ((num_send_packet * wc_cluster.D) / (W * wc_cluster.T)) - 1

@@ -6,9 +6,6 @@ authors = ["Nguyen Duc Tai <ductaingn.015203@gmail.com>"]
 readme = "README.md"
 packages = [{ include = "multi_agent_power_allocation", from = "src" }]
 
-[tool.poetry.excludes]
-"src/data/*" = true
-
 [tool.poetry.dependencies]
 python = "3.11.13"
 attrs = "25.3.0"
@@ -24,6 +21,7 @@ tqdm = "^4.67.1"
 rich = "^14.1.0"
 matplotlib = "^3.10.6"
 torchinfo = "^1.8.0"
+huggingface-hub = ">=0.24"
 
 [[tool.poetry.source]]
 name = "torch-cpu"
@@ -36,3 +34,15 @@ train_pamarl = "multi_agent_power_allocation.run.train:main"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+# pyflakes, pycodestyle errors (imports, statements, syntax) and import sorting
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["multi_agent_power_allocation"]

@@ -1,11 +1,12 @@
 import os
+
 from tqdm import tqdm
 
+from multi_agent_power_allocation import BASE_DIR
+from multi_agent_power_allocation.utils.train_config import TrainConfig
 from multi_agent_power_allocation.wireless_environment.env.env import (
     WirelessEnvironment,
 )
-from multi_agent_power_allocation import BASE_DIR
-from multi_agent_power_allocation.utils.train_config import TrainConfig
 
 if __name__ == "__main__":
     config_path = os.path.join(BASE_DIR, "run", "default_config.yaml")

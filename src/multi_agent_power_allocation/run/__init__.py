@@ -1,2 +1,3 @@
-from . import train
-from . import test
+from . import test, train
+
+__all__ = ["test", "train"]
