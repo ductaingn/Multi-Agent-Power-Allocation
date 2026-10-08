@@ -1,3 +1,7 @@
+> [!IMPORTANT]
+> **This repository has moved to [ductaingn/MultiConnectRL](https://github.com/ductaingn/MultiConnectRL.git).**
+> It is archived and no longer maintained. Please open issues and pull requests in the new repository.
+
 # Multi-Agent Power Allocation
 
 Multi-agent DRL for joint interface selection, packet allocation and power control in integrated
