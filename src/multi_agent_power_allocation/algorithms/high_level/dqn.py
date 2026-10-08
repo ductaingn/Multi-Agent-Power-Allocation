@@ -1,12 +1,9 @@
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
 import attrs
-
 import numpy as np
-
 import torch
-
-from gymnasium.spaces import Space, Box, Discrete
+from gymnasium.spaces import Box, Discrete, Space
 
 from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm import (
     Algorithm,
@@ -28,7 +25,9 @@ class DQN(Algorithm):
     # False: every active link gets P_sum / (N + M) as in the original RAQL paper.
     # True: the whole budget is used, split like SACPF (fairer power comparison).
     full_power_budget: bool = attrs.field(default=False, kw_only=True)
-    reward_fn: CumulativeQoSReward = attrs.field(init=False, factory=CumulativeQoSReward)
+    reward_fn: CumulativeQoSReward = attrs.field(
+        init=False, factory=CumulativeQoSReward
+    )
     num_iot_devices: int = attrs.field(init=False)
     interface_hash_map: Dict[int, np.ndarray] = attrs.field(init=False)
 

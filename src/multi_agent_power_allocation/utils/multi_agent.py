@@ -1,24 +1,22 @@
 from typing import Dict, Optional
 
 import attrs
+import numpy as np
+import torch
 from rich.progress import (
-    Progress,
     BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
-    MofNCompleteColumn,
-    TextColumn,
 )
 
-import torch
-
-import numpy as np
-
-from ..wireless_environment.env.wrapper import SyncVecEnv
-from .logger import Logger
-from .checkpoint import Checkpointer
 from ..algorithms.high_level import Algorithm
 from ..algorithms.low_level.utils.replay_buffer import ReplayBuffer, ReplayBufferSamples
+from ..wireless_environment.env.wrapper import SyncVecEnv
+from .checkpoint import Checkpointer
+from .logger import Logger
 
 
 @attrs.define

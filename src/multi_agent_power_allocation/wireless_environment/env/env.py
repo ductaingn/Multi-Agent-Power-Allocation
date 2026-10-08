@@ -1,25 +1,24 @@
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 import attrs
-
-from pettingzoo import ParallelEnv
-
-import torch
-import numpy as np
-
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-
+import numpy as np
 import pygame
+import torch
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from pettingzoo import ParallelEnv
 from pygame import Surface
 
+from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
+from multi_agent_power_allocation.algorithms.high_level import Algorithm, Reward
+from multi_agent_power_allocation.utils.plot import plot_positions
+from multi_agent_power_allocation.wireless_environment.constants import (
+    _initialize_path_loss_constants,
+)
 from multi_agent_power_allocation.wireless_environment.wireless_communication_cluster import (
     WirelessCommunicationCluster,
     compute_h_sub,
 )
-from multi_agent_power_allocation.utils.plot import plot_positions
-from multi_agent_power_allocation.algorithms.high_level import Algorithm, Reward
-from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
-from multi_agent_power_allocation.wireless_environment.constants import _initialize_path_loss_constants, NUM_OF_FRAME
 
 
 @attrs.define
@@ -59,7 +58,7 @@ class WirelessEnvironment(ParallelEnv):
         self.agents = list(self.algorithm_mapping.keys())
         self.possible_agents = self.agents[:]
         self.reward_qos = {agent: 0.0 for agent in self.agents}
-        
+
         for i in range(self.num_cluster):
             if not (
                 self.wc_clusters_configs[i].get("LOS_PATH_LOSS")
@@ -67,11 +66,9 @@ class WirelessEnvironment(ParallelEnv):
             ):
                 num_devices: int = self.wc_clusters_configs[i]["num_devices"]
                 los, nlos = _initialize_path_loss_constants(
-                    self.max_num_step, 
-                    num_devices, 
-                    self.rng
+                    self.max_num_step, num_devices, self.rng
                 )
-                
+
                 self.wc_clusters_configs[i].update({"LOS_PATH_LOSS": los})
                 self.wc_clusters_configs[i].update({"NLOS_PATH_LOSS": nlos})
 
@@ -235,9 +232,7 @@ class WirelessEnvironment(ParallelEnv):
 
         return observations
 
-    def get_infos(
-        self, rewards: Dict[str, Reward]
-    ) -> Dict[str, Dict[str, float]]:
+    def get_infos(self, rewards: Dict[str, Reward]) -> Dict[str, Dict[str, float]]:
         infos = {}
 
         for agent in self.agents:

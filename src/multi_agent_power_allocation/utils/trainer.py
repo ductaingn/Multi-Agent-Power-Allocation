@@ -3,28 +3,28 @@ Trainer
 """
 
 import os
-from typing import Dict, List, Optional
 from copy import deepcopy
-import attrs
+from typing import Dict, List, Optional
 
+import attrs
 import torch
 
-from multi_agent_power_allocation.wireless_environment.env import WirelessEnvironment
-from multi_agent_power_allocation.wireless_environment.env.wrapper import SyncVecEnv
-from multi_agent_power_allocation.utils.logger import Logger
+from multi_agent_power_allocation.algorithms.high_level import Algorithm
 from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
     ReplayBuffer,
 )
-from multi_agent_power_allocation.utils.multi_agent import (
-    MultiAgentTrainer,
-    MultiAgentPolicyManager,
-)
-from multi_agent_power_allocation.algorithms.high_level import Algorithm
 from multi_agent_power_allocation.utils.checkpoint import (
     Checkpointer,
     resolve_checkpoint_config,
     slugify,
 )
+from multi_agent_power_allocation.utils.logger import Logger
+from multi_agent_power_allocation.utils.multi_agent import (
+    MultiAgentPolicyManager,
+    MultiAgentTrainer,
+)
+from multi_agent_power_allocation.wireless_environment.env import WirelessEnvironment
+from multi_agent_power_allocation.wireless_environment.env.wrapper import SyncVecEnv
 
 
 @attrs.define

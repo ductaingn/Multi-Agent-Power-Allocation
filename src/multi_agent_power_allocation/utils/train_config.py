@@ -1,30 +1,26 @@
+import json
 import os
+import pickle
 from copy import deepcopy
 from typing import Dict, List
 
-import pickle
-import json
-import yaml
-
 import attrs
-
 import numpy as np
-
 import torch
+import yaml
 from torch.optim import Adam
 
 # from torch.optim.lr_scheduler import CosineAnnealingLR
-
 from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
-from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic, DQNQNetwork
-from multi_agent_power_allocation.algorithms.low_level import (
-    SAC,
-    RAQL,
-    Random,
-    DQN,
-)
 from multi_agent_power_allocation.algorithms.high_level import Algorithm
+from multi_agent_power_allocation.algorithms.low_level import (
+    DQN,
+    RAQL,
+    SAC,
+    Random,
+)
+from multi_agent_power_allocation.nn.module import DQNQNetwork, SACPAACtor, SACPACritic
 
 
 def load_config(config_file_path: str, overrides: List[str] | None = None) -> Dict:
@@ -38,7 +34,9 @@ def load_config(config_file_path: str, overrides: List[str] | None = None) -> Di
 
     for override in overrides or []:
         if "=" not in override:
-            raise ValueError(f"Override must look like `key.subkey=value`, got `{override}`")
+            raise ValueError(
+                f"Override must look like `key.subkey=value`, got `{override}`"
+            )
         dotted_key, raw_value = override.split("=", 1)
         *parents, leaf = dotted_key.split(".")
         node = config
@@ -138,7 +136,9 @@ class TrainConfig:
                         "packet_loss_rate_time_window"
                     ],
                     "P_sum": dbm_to_watt(wc_cluster_config["P_sum"]),
-                    "baseline_rate_estimate": wc_cluster_config.get("baseline_rate_estimate", "window"),
+                    "baseline_rate_estimate": wc_cluster_config.get(
+                        "baseline_rate_estimate", "window"
+                    ),
                 }
             )
 

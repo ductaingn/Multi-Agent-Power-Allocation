@@ -1,12 +1,9 @@
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
 import attrs
-
 import numpy as np
-
 import torch
-
-from gymnasium.spaces import Space, Box, Discrete, MultiDiscrete
+from gymnasium.spaces import Box, Space
 
 from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm import (
     Algorithm,
@@ -29,7 +26,9 @@ class RAQL(Algorithm):
     # False: every active link gets P_sum / (N + M) as in the original RAQL paper.
     # True: the whole budget is used, split like SACPF (fairer power comparison).
     full_power_budget: bool = attrs.field(default=False, kw_only=True)
-    reward_fn: CumulativeQoSReward = attrs.field(init=False, factory=CumulativeQoSReward)
+    reward_fn: CumulativeQoSReward = attrs.field(
+        init=False, factory=CumulativeQoSReward
+    )
 
     @classmethod
     def observation_space(  # pylint: disable=W0221
@@ -76,13 +75,17 @@ class RAQL(Algorithm):
         Flattened
         """
         return Box(
-            low=np.array([
-                np.zeros(shape=(num_iot_devices), dtype=int),
-            ]).flatten(),
-            high=np.array([
-                np.full(shape=(num_iot_devices), fill_value=2, dtype=int),
-            ]).flatten(),
-            dtype=int
+            low=np.array(
+                [
+                    np.zeros(shape=(num_iot_devices), dtype=int),
+                ]
+            ).flatten(),
+            high=np.array(
+                [
+                    np.full(shape=(num_iot_devices), fill_value=2, dtype=int),
+                ]
+            ).flatten(),
+            dtype=int,
         )
 
     def get_state(self, wc_cluster: "WirelessCommunicationCluster") -> np.ndarray:

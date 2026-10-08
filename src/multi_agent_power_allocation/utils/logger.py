@@ -1,13 +1,10 @@
 import argparse
 import os
-from typing import Any, Callable, Dict, Optional, Tuple, List
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import attrs
-
 import numpy as np
-
 import plotly.graph_objects as go
-
 import wandb
 from wandb.sdk.wandb_run import Run
 
@@ -53,12 +50,9 @@ class Logger:
             cluster_data: Dict = cluster_data[0]  # Unpack batch
             prefix = next(iter(cluster_data.keys())).split("/")[0]
 
-            num_sent_packet_acc = cluster_data.pop(
-                f"{prefix}/ Accumulate/ Num. Sent packet"
-            )
-            num_received_packet_acc = cluster_data.pop(
-                f"{prefix}/ Accumulate/ Num. Received packet"
-            )
+            # Accumulated counters are not logged
+            cluster_data.pop(f"{prefix}/ Accumulate/ Num. Sent packet")
+            cluster_data.pop(f"{prefix}/ Accumulate/ Num. Received packet")
             # Disable log Plotly image to save WandB store space
             # fig = self.plot_interface_usage(
             #     num_sent_packet_acc,
@@ -98,7 +92,9 @@ class Logger:
         if self.history_path is None or not self._history_steps:
             return None
         os.makedirs(os.path.dirname(os.path.abspath(self.history_path)), exist_ok=True)
-        values = np.full((len(self._history_rows), len(self._history)), np.nan, dtype=np.float32)
+        values = np.full(
+            (len(self._history_rows), len(self._history)), np.nan, dtype=np.float32
+        )
         for i, row in enumerate(self._history_rows):
             values[i, : len(row)] = row
         keys = sorted(self._history, key=self._history.get)  # column order
@@ -183,7 +179,7 @@ class Logger:
         """
         num_dropped_packet = num_sent_packet - num_received_packet
         num_devices = num_sent_packet.shape[0]
-        x = [f"D{k+1}" for k in range(num_devices)]
+        x = [f"D{k + 1}" for k in range(num_devices)]
 
         fig = go.Figure()
 

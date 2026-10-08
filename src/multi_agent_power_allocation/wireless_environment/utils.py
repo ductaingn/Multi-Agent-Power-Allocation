@@ -3,8 +3,6 @@ Utility functions for wireless environment simulation.
 This module provides functions to generate device positions, compute path loss, rates, e.t.c.
 """
 
-from typing import Union
-
 import pickle
 
 import numpy as np
@@ -354,25 +352,26 @@ def segments_intersect(s1: np.ndarray, s2: np.ndarray) -> bool:
     p1, p2 = s1[0], s1[1]
     p3, p4 = s2[0], s2[1]
 
-    x1,y1 = p1
-    x2,y2 = p2
-    x3,y3 = p3
-    x4,y4 = p4
-    denom = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1)
-    if denom == 0: # parallel
+    x1, y1 = p1
+    x2, y2 = p2
+    x3, y3 = p3
+    x4, y4 = p4
+    denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1)
+    if denom == 0:  # parallel
         return False
-    ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom
-    if ua < 0 or ua > 1: # out of range
+    ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denom
+    if ua < 0 or ua > 1:  # out of range
         return False
-    ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom
-    if ub < 0 or ub > 1: # out of range
+    ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denom
+    if ub < 0 or ub > 1:  # out of range
         return False
-    
+
     # # Intersection
     # x = x1 + ua * (x2-x1)
     # y = y1 + ua * (y2-y1)
 
     return True
+
 
 def rotate_points(
     points: np.ndarray, angle_degrees: float, origin: tuple[float, float] = (0, 0)

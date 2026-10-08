@@ -3,21 +3,18 @@ Model checkpointing: periodic/best/final local saves, optional upload to WandB a
 and to the Hugging Face Hub.
 """
 
+import json
 import os
 import re
-import json
 import shutil
 from typing import Any, Dict, Optional
 
 import attrs
+import numpy as np
+import torch
 import yaml
 
-import numpy as np
-
-import torch
-
 from multi_agent_power_allocation.algorithms.high_level import Algorithm
-
 
 DEFAULT_CHECKPOINT_CONFIG: Dict[str, Any] = {
     "enabled": True,
@@ -46,7 +43,9 @@ def resolve_checkpoint_config(config: Optional[Dict[str, Any]]) -> Dict[str, Any
     resolved = dict(DEFAULT_CHECKPOINT_CONFIG)
     resolved.update(config or {})
     if resolved["push_to_hub"] and not resolved["hf_repo_id"]:
-        raise ValueError("`checkpoint_config.hf_repo_id` is required when `push_to_hub` is true")
+        raise ValueError(
+            "`checkpoint_config.hf_repo_id` is required when `push_to_hub` is true"
+        )
     return resolved
 
 

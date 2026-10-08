@@ -1,10 +1,10 @@
-import os
 import argparse
+import os
 
-from multi_agent_power_allocation.utils.trainer import Trainer
-from multi_agent_power_allocation.utils.train_config import TrainConfig, load_config
-from multi_agent_power_allocation.utils.seed import create_generator, set_seed
 from multi_agent_power_allocation import BASE_DIR
+from multi_agent_power_allocation.utils.seed import create_generator, set_seed
+from multi_agent_power_allocation.utils.train_config import TrainConfig, load_config
+from multi_agent_power_allocation.utils.trainer import Trainer
 
 
 def main():

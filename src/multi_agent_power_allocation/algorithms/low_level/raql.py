@@ -1,20 +1,17 @@
-from typing import Any, Tuple, Union, List, Dict
-from collections import defaultdict
 import pickle
+from collections import defaultdict
+from typing import Any, Dict, List, Tuple, Union
 
 import attrs
-
-import torch
-
-import numpy as np
-
 import gymnasium as gym
+import numpy as np
+import torch
 
 from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
     ReplayBufferSamples,
 )
-from . import LowLevelAlgorithm, DummyActor
 
+from . import DummyActor, LowLevelAlgorithm
 
 ln2 = np.log(2)
 
@@ -454,10 +451,10 @@ class RAQL(LowLevelAlgorithm):
     def inference(self, obs, **kwargs):
         unbatched_obs = self.unbatch_obs(obs)
         batched_actions = []
-        
+
         for o in unbatched_obs:
             state = tuple(o.flatten().tolist())
-            
+
             # Use Generator if available, otherwise fall back to global numpy RNG
             if self.rng is None:
                 H = np.random.randint(0, self.num_q_table)
@@ -465,7 +462,7 @@ class RAQL(LowLevelAlgorithm):
             else:
                 H = self.rng.integers(0, self.num_q_table)
                 p = self.rng.random()
-            
+
             Q_random = self.Q_tables[H]
             self.epsilon = self.epsilon * self.lambda_
 
@@ -490,14 +487,16 @@ class RAQL(LowLevelAlgorithm):
             obs = tuple(obs.flatten().tolist())
             next_obs = tuple(next_obs.flatten().tolist())
             act = tuple(act.flatten().tolist())
-            rew = float(np.squeeze(rew))  # (1,) array from the buffer -> scalar Q-values
+            rew = float(
+                np.squeeze(rew)
+            )  # (1,) array from the buffer -> scalar Q-values
 
             # Use Generator if available, otherwise fall back to global numpy RNG
             if self.rng is None:
                 J = np.random.poisson(1, self.num_q_table)
             else:
                 J = self.rng.poisson(1, self.num_q_table)
-            
+
             for i in range(self.num_q_table):
                 if J[i] == 1:
                     self.V_tables[i].update(obs, act)

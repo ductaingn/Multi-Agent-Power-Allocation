@@ -2,21 +2,19 @@ from copy import deepcopy
 from typing import Tuple
 
 import attrs
-
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Independent, Normal
 
-import numpy as np
-
 from multi_agent_power_allocation.algorithms.low_level.low_level_algorithm import (
     LowLevelAlgorithm,
 )
-from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic
 from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
     ReplayBufferSamples,
 )
+from multi_agent_power_allocation.nn.module import SACPAACtor, SACPACritic
 
 
 @attrs.define

@@ -1,6 +1,5 @@
 import numpy as np
 
-
 # Number of APs
 NUM_OF_AP = 1
 # Number of Devices K
@@ -29,14 +28,15 @@ D = 8000
 # Number of frame
 NUM_OF_FRAME = 10000
 
+
 def _initialize_path_loss_constants(
-        n_frame: int = NUM_OF_FRAME, 
-        n_devices: int = NUM_OF_DEVICE,
-        rng: np.random.Generator | None = None
-    ) -> tuple:
+    n_frame: int = NUM_OF_FRAME,
+    n_devices: int = NUM_OF_DEVICE,
+    rng: np.random.Generator | None = None,
+) -> tuple:
     """
     Initialize path loss constants with optional seed control.
-    
+
     Parameters
     ----------
     n_frame : int, optional
@@ -54,11 +54,12 @@ def _initialize_path_loss_constants(
         los = np.random.normal(0, 5.8, size=(n_frame + 1, n_devices))
         nlos = np.random.normal(0, 8.7, size=(n_frame + 1, n_devices))
         return los, nlos
-    
+
     los = rng.normal(0, 5.8, size=(n_frame + 1, n_devices))
     nlos = rng.normal(0, 8.7, size=(n_frame + 1, n_devices))
 
     return los, nlos
+
 
 # Map specs
 AP_RANGE = 142

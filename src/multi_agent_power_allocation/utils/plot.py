@@ -1,17 +1,16 @@
 import os
 from typing import Dict, List
 
-import numpy as np
-
-import matplotlib.pyplot as plt
-from matplotlib.axes import Axes
-from matplotlib.lines import Line2D
-from matplotlib.colors import Colormap
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-from matplotlib.legend_handler import HandlerBase
 import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.axes import Axes
+from matplotlib.colors import Colormap
 from matplotlib.image import BboxImage
-from matplotlib.transforms import TransformedBbox, Bbox
+from matplotlib.legend_handler import HandlerBase
+from matplotlib.lines import Line2D
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+from matplotlib.transforms import Bbox, TransformedBbox
 
 from multi_agent_power_allocation import BASE_DIR
 from multi_agent_power_allocation.wireless_environment.constants import MAP_SIZE
@@ -184,6 +183,7 @@ def plot_positions(
 
 if __name__ == "__main__":
     import json
+
     from multi_agent_power_allocation.wireless_environment.utils import rotate_points
 
     scenario = "scenario_5"

@@ -67,7 +67,17 @@ Scenarios live in `src/multi_agent_power_allocation/data/<scenario>/cluster_<i>/
 cover `max_num_step` frames; generate them with
 
 ```python
-from multi_agent_power_allocation.wireless_environment.wireless_communication_cluster import WirelessCommunicationCluster
-WirelessCommunicationCluster.generate_data(scenario_name="scenario_4_30k", num_cluster=4, num_timestep=30000,
-                                           num_device=3, num_subchannel=5, num_beam=5, seed=1)
+from multi_agent_power_allocation.wireless_environment.wireless_communication_cluster import (
+    WirelessCommunicationCluster,
+)
+
+WirelessCommunicationCluster.generate_data(
+    scenario_name="scenario_4_30k",
+    num_cluster=4,
+    num_timestep=30000,
+    num_device=3,
+    num_subchannel=5,
+    num_beam=5,
+    seed=1,
+)
 ```

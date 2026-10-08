@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Generator
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -77,9 +76,9 @@ def get_action_dim(action_space: spaces.Space) -> int:
         return int(len(action_space.nvec))
     elif isinstance(action_space, spaces.MultiBinary):
         # Number of binary actions
-        assert isinstance(
-            action_space.n, int
-        ), f"Multi-dimensional MultiBinary({action_space.n}) action space is not supported. You can flatten it instead."
+        assert isinstance(action_space.n, int), (
+            f"Multi-dimensional MultiBinary({action_space.n}) action space is not supported. You can flatten it instead."
+        )
         return int(action_space.n)
     else:
         raise NotImplementedError(f"{action_space} action space is not supported")
@@ -106,7 +105,10 @@ def get_obs_shape(
         # Number of binary features
         return observation_space.shape
     elif isinstance(observation_space, spaces.Dict):
-        return {key: get_obs_shape(subspace) for (key, subspace) in observation_space.spaces.items()}  # type: ignore[misc]
+        return {
+            key: get_obs_shape(subspace)
+            for (key, subspace) in observation_space.spaces.items()
+        }  # type: ignore[misc]
 
     else:
         raise NotImplementedError(

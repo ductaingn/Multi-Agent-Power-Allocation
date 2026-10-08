@@ -2,24 +2,20 @@ from copy import deepcopy
 from typing import Callable
 
 import attrs
-
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-
-import numpy as np
-
 from gymnasium.spaces import Discrete
 
 from multi_agent_power_allocation.algorithms.low_level.low_level_algorithm import (
-    LowLevelAlgorithm,
     DummyActor,
+    LowLevelAlgorithm,
 )
-from multi_agent_power_allocation.nn.module import DQNQNetwork as QNetwork
 from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
     ReplayBufferSamples,
 )
-
+from multi_agent_power_allocation.nn.module import DQNQNetwork as QNetwork
 
 LAMBDA = 0.995  # Similar to RAQL
 

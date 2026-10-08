@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
 from copy import deepcopy
+from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
 
 import numpy as np
-
 from pettingzoo import ParallelEnv
 
 # Type aliases
@@ -104,7 +103,9 @@ class SyncVecEnv:
 
         return (deepcopy(batched_obs) if self.copy else batched_obs, batched_infos)
 
-    def step(self, actions: BatchedActions) -> Tuple[
+    def step(
+        self, actions: BatchedActions
+    ) -> Tuple[
         BatchedObs,
         BatchedRewards,
         BatchedTerminations,

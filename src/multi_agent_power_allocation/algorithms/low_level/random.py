@@ -1,12 +1,10 @@
 import attrs
-
+import gymnasium as gym
 import torch
 
-import gymnasium as gym
-
 from multi_agent_power_allocation.algorithms.low_level.low_level_algorithm import (
-    LowLevelAlgorithm,
     DummyActor,
+    LowLevelAlgorithm,
 )
 from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
     ReplayBufferSamples,

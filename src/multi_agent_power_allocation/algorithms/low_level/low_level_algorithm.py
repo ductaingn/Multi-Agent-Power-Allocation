@@ -2,12 +2,10 @@ from abc import ABC
 from typing import Any, Dict, Tuple
 
 import attrs
-
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim import Optimizer
-
-import numpy as np
 
 from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
     ReplayBufferSamples,

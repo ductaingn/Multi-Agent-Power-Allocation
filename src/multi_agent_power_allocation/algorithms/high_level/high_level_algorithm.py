@@ -1,19 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Tuple
 
 import attrs
-
 import numpy as np
-
 import torch
-
 from gymnasium.spaces import Space
 
-from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
-    ReplayBufferSamples,
-)
 from multi_agent_power_allocation.algorithms.low_level.low_level_algorithm import (
     LowLevelAlgorithm,
+)
+from multi_agent_power_allocation.algorithms.low_level.utils.replay_buffer import (
+    ReplayBufferSamples,
 )
 
 if TYPE_CHECKING:
@@ -53,7 +50,9 @@ class CumulativeQoSReward:
         self.num_frames += 1
         psr_average = self.psr_sum / self.num_frames
 
-        qos_satisfied = wc_cluster.packet_loss_rate <= wc_cluster.qos_threshold  # (K, 2)
+        qos_satisfied = (
+            wc_cluster.packet_loss_rate <= wc_cluster.qos_threshold
+        )  # (K, 2)
         penalty = float(np.sum(1 - qos_satisfied))
 
         reward_qos = psr_average - penalty

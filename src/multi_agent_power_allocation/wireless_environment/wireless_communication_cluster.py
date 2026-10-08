@@ -3,29 +3,29 @@ Wireless Communication Cluster Module
 This module defines the base class for wireless communication cluster, each cluster represents a group of one Access Point (AP) serves K IoT devices through wireless communication.
 """
 
-import os
-from typing import Dict, Union
-import random
 import json
+import os
 import pickle
-import attrs
+import random
+from typing import Dict, Union
 
+import attrs
 import numpy as np
 
 from multi_agent_power_allocation import BASE_DIR
-from multi_agent_power_allocation.wireless_environment.utils import (
-    signal_power,
-    gamma,
-    compute_rate,
-    compute_h_sub,
-    compute_h_mW,
-    generate_h_tilde,
-    segments_intersect,
-    rotate_points,
-)
-from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
 from multi_agent_power_allocation.algorithms.algorithm_register import Algorithms
 from multi_agent_power_allocation.algorithms.high_level import Reward
+from multi_agent_power_allocation.wireless_environment.constants import AP_RANGE
+from multi_agent_power_allocation.wireless_environment.utils import (
+    compute_h_mW,
+    compute_h_sub,
+    compute_rate,
+    gamma,
+    generate_h_tilde,
+    rotate_points,
+    segments_intersect,
+    signal_power,
+)
 
 
 @attrs.define(slots=False)
@@ -333,7 +333,7 @@ class WirelessCommunicationCluster:
             [100.0, -100.0],
         ]
         respective_device_positions = [
-            [20, 0],  # Device 1 
+            [20, 0],  # Device 1
             [0, 20],  # Device 2
             [-85, -80],  # Device 3
             [-45, 40],  # Device 4
@@ -393,13 +393,17 @@ class WirelessCommunicationCluster:
             save_path = os.path.join(
                 BASE_DIR, "data", scenario_name, f"cluster_{i}", "positions.json"
             )
-            
+
             try:
                 with open(save_path, "wt", encoding="utf-8") as file:
                     json.dump(clusters[i], file, indent=4)
-                    print(f"Saved APs, devices, and obstacles positions of cluster {i} at \n{save_path}")
+                    print(
+                        f"Saved APs, devices, and obstacles positions of cluster {i} at \n{save_path}"
+                    )
             except Exception as e:
-                print(f"Error occured when trying to save APs, devices, and obstacles positions: {e}")
+                print(
+                    f"Error occured when trying to save APs, devices, and obstacles positions: {e}"
+                )
 
     @classmethod
     def generate_h_tilde(
@@ -704,7 +708,9 @@ class WirelessCommunicationCluster:
         self.average_rate_stacked[0] = self.instant_rate
         used = self.num_send_packet > 0
         self.used_rate_count[used] += 1
-        self.used_rate_average[used] += (self.instant_rate[used] - self.used_rate_average[used]) / self.used_rate_count[used]
+        self.used_rate_average[used] += (
+            self.instant_rate[used] - self.used_rate_average[used]
+        ) / self.used_rate_count[used]
 
     def update_packet_loss_rate(self):
         """
@@ -809,15 +815,19 @@ class WirelessCommunicationCluster:
         -------
         None
         """
-        l = np.multiply(self.average_rate_stacked.mean(axis=0), self.T / self.D)
+        num_packets = np.multiply(
+            self.average_rate_stacked.mean(axis=0), self.T / self.D
+        )
         if isinstance(algorithm, Algorithms.RAQL.value) or isinstance(
             algorithm, Algorithms.DQN.value
         ):
             if self.baseline_rate_estimate == "average":
                 # Never-used links get L_max: no information yet, as for an unknown link
-                average_rate = np.where(self.used_rate_count > 0, self.used_rate_average, np.inf)
-                l = np.minimum(average_rate * self.T / self.D, self.L_max)
-            l_max_estimate = np.floor(l)
+                average_rate = np.where(
+                    self.used_rate_count > 0, self.used_rate_average, np.inf
+                )
+                num_packets = np.minimum(average_rate * self.T / self.D, self.L_max)
+            l_max_estimate = np.floor(num_packets)
         elif (
             isinstance(algorithm, Algorithms.SACPA.value)
             or isinstance(algorithm, Algorithms.SACPF.value)
@@ -826,10 +836,10 @@ class WirelessCommunicationCluster:
             packet_successful_rate = np.ones(
                 shape=(self.num_devices, 2)
             ) - self.packet_loss_rate_stacked.mean(axis=0)
-            l_max_estimate = np.floor(l * packet_successful_rate)
+            l_max_estimate = np.floor(num_packets * packet_successful_rate)
 
             # After a long time of not sending via one interface,
-            # the average rate drop so much that `l` becomes 0.0, eventhough the packet successful rate is 1.0
+            # the average rate drop so much that `num_packets` becomes 0.0, eventhough the packet successful rate is 1.0
             # This prevents under-use of interfaces and improve exploration of the policy
             packet_successful_rate_warm_up_threshold = 1.0
             indx = np.where(

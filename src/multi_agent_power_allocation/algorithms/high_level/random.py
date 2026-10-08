@@ -1,13 +1,10 @@
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
 import attrs
-
 import numpy as np
-
 import torch
+from gymnasium.spaces import Box, Space
 from torch.nn.functional import softmax
-
-from gymnasium.spaces import Space, Box
 
 from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm import (
     Algorithm,
@@ -153,9 +150,7 @@ class Random(Algorithm):
                 0, wc_cluster.L_max, (wc_cluster.num_devices, 2)
             ).numpy()
             power = (
-                torch.softmax(
-                    torch.rand(wc_cluster.num_devices * 2), dim=-1
-                )
+                torch.softmax(torch.rand(wc_cluster.num_devices * 2), dim=-1)
                 .reshape(wc_cluster.num_devices, 2)
                 .numpy()
             )

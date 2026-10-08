@@ -2,10 +2,10 @@ from enum import Enum
 
 from multi_agent_power_allocation.algorithms.high_level import (
     DQN,
-    Random,
     RAQL,
     SACPA,
     SACPF,
+    Random,
 )
 
 
