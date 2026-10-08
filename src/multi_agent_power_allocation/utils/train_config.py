@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 from typing import Dict, List
 
 import pickle
@@ -26,14 +27,45 @@ from multi_agent_power_allocation.algorithms.low_level import (
 from multi_agent_power_allocation.algorithms.high_level import Algorithm
 
 
+def load_config(config_file_path: str, overrides: List[str] | None = None) -> Dict:
+    """
+    Load a YAML config and apply `dotted.key=value` overrides, e.g.
+    `env_config.seed=3` or `env_config.algorithm_list=[SACPA,SACPA,SACPA,SACPA]`.
+    Values are parsed as YAML so numbers, booleans, lists and null work as expected.
+    """
+    with open(config_file_path, "rb") as file:
+        config: Dict = yaml.safe_load(file)
+
+    for override in overrides or []:
+        if "=" not in override:
+            raise ValueError(f"Override must look like `key.subkey=value`, got `{override}`")
+        dotted_key, raw_value = override.split("=", 1)
+        *parents, leaf = dotted_key.split(".")
+        node = config
+        for key in parents:
+            node = node.setdefault(key, {})
+        value = yaml.safe_load(raw_value)
+        if isinstance(value, str):
+            try:  # YAML 1.1 reads "1e-3" as a string
+                value = float(value)
+            except ValueError:
+                pass
+        node[leaf] = value
+
+    return config
+
+
 def dbm_to_watt(p_dbm: float) -> float:
     return 10 ** (p_dbm / 10) * 1e-3
 
 
 @attrs.define
 class TrainConfig:
-    config_file_path: str
+    config_file_path: str | None = None
     rng: np.random.Generator | None = attrs.field(default=None, kw_only=True)
+    config_dict: Dict | None = attrs.field(default=None, kw_only=True)
+    raw_config: Dict = attrs.field(init=False)
+    checkpoint_config: Dict = attrs.field(init=False)
     model_config: Dict = attrs.field(init=False)
     env_config: Dict = attrs.field(init=False)
     num_cluster: int = attrs.field(init=False)
@@ -45,12 +77,15 @@ class TrainConfig:
     seed: int | None = attrs.field(init=False)
 
     def __attrs_post_init__(self):
-        try:
-            with open(self.config_file_path, "rb") as file:
-                config: Dict = yaml.safe_load(file)
-        except FileExistsError as e:
-            print("Error occured when trying to open default config file!")
-            print(e)
+        if self.config_dict is not None:
+            config: Dict = deepcopy(self.config_dict)
+        elif self.config_file_path is not None:
+            config = load_config(self.config_file_path)
+        else:
+            raise ValueError("Either `config_file_path` or `config_dict` must be given")
+        # Plain copy of the YAML config: light enough for WandB and checkpoint metadata
+        self.raw_config = deepcopy(config)
+        self.checkpoint_config = config.get("checkpoint_config") or {}
 
         model_config: Dict = config.get("model_config")
         env_config: Dict = config.get("env_config")

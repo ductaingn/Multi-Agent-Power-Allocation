@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import attrs
 from rich.progress import (
@@ -16,6 +16,7 @@ import numpy as np
 
 from ..wireless_environment.env.wrapper import SyncVecEnv
 from .logger import Logger
+from .checkpoint import Checkpointer
 from ..algorithms.high_level import Algorithm
 from ..algorithms.low_level.utils.replay_buffer import ReplayBuffer, ReplayBufferSamples
 
@@ -53,6 +54,7 @@ class MultiAgentTrainer:
     batch_size: int
     logger: Logger
     learning_start: int = 200
+    checkpointer: Optional[Checkpointer] = None
     num_timesteps: int = attrs.field(default=0, init=False)
     _last_obs: Dict[str, torch.Tensor] = attrs.field(init=False)
 
@@ -98,7 +100,7 @@ class MultiAgentTrainer:
 
         self._last_obs = next_observations
 
-        return infos
+        return infos, rewards
 
     def sample_data(self):
         data = {
@@ -127,7 +129,7 @@ class MultiAgentTrainer:
 
         with progress:
             while self.num_timesteps < self.n_step_per_env:
-                infos = self.collect_data()
+                infos, rewards = self.collect_data()
 
                 log_data = {"clusters_data": infos}
 
@@ -139,6 +141,9 @@ class MultiAgentTrainer:
 
                 self.logger.write(self.num_timesteps, log_data)
 
+                if self.checkpointer is not None:
+                    self.checkpointer.step(self.num_timesteps, rewards)
+
                 self.num_timesteps += 1
 
                 progress.update(
@@ -146,3 +151,6 @@ class MultiAgentTrainer:
                     advance=1,
                     step=self.num_timesteps,
                 )
+
+        if self.checkpointer is not None:
+            self.checkpointer.finalize(self.num_timesteps)

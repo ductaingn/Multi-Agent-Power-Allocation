@@ -332,6 +332,49 @@ class RAQL(LowLevelAlgorithm):
     def _Alpha_tables_factory(self):
         return [AlphaTable() for _ in range(self.num_q_table)]
 
+    def state_dict(self) -> Dict[str, Any]:
+        def dump(table: Table) -> Dict:
+            return {
+                "default_value": table.default_value,
+                "table": {s: dict(a) for s, a in table.table.items()},
+            }
+
+        state = super().state_dict()
+        state["Q_tables"] = [
+            {**dump(q), "best_action_cache": dict(q.best_action_cache)}
+            for q in self.Q_tables
+        ]
+        state["V_tables"] = [dump(v) for v in self.V_tables]
+        state["Alpha_tables"] = [dump(a) for a in self.Alpha_tables]
+        return state
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        def restore(table: Table, saved: Dict):
+            table.default_value = saved["default_value"]
+            table.table = defaultdict(
+                lambda: defaultdict(lambda: table.default_value),
+                {
+                    s: defaultdict(lambda: table.default_value, a)
+                    for s, a in saved["table"].items()
+                },
+            )
+
+        state = dict(state)
+        for name, cls in (
+            ("Q_tables", QTable),
+            ("V_tables", VTable),
+            ("Alpha_tables", AlphaTable),
+        ):
+            tables = []
+            for saved in state.pop(name):
+                table = cls()
+                restore(table, saved)
+                if "best_action_cache" in saved:
+                    table.best_action_cache = dict(saved["best_action_cache"])
+                tables.append(table)
+            setattr(self, name, tables)
+        super().load_state_dict(state)
+
     def unbatch_obs(self, obs) -> List[np.ndarray]:
         return [o for o in obs]
 
