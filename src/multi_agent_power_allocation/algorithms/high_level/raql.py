@@ -12,6 +12,7 @@ from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm imp
     Algorithm,
     CumulativeQoSReward,
     Reward,
+    full_budget_power,
 )
 from multi_agent_power_allocation.algorithms.low_level.raql import RAQL as LLRAQL
 
@@ -25,6 +26,9 @@ if TYPE_CHECKING:
 class RAQL(Algorithm):
     low_level_algorithm: LLRAQL
     learns_online = True  # Algorithm 1 of Dinh et al.: one update per frame on the current transition
+    # False: every active link gets P_sum / (N + M) as in the original RAQL paper.
+    # True: the whole budget is used, split like SACPF (fairer power comparison).
+    full_power_budget: bool = attrs.field(default=False, kw_only=True)
     reward_fn: CumulativeQoSReward = attrs.field(init=False, factory=CumulativeQoSReward)
 
     @classmethod
@@ -155,6 +159,9 @@ class RAQL(Algorithm):
                     power[k, 0] = 0
                 if number_of_send_packet[k, 1] == 0:
                     power[k, 1] = 0
+
+        if self.full_power_budget:
+            power = full_budget_power(number_of_send_packet)
 
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)

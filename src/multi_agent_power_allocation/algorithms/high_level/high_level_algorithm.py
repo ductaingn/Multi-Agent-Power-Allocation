@@ -22,6 +22,18 @@ if TYPE_CHECKING:
     )
 
 
+def full_budget_power(num_send_packet: np.ndarray) -> np.ndarray:
+    """
+    Share the whole power budget uniformly among the devices (1/K each) and, within a device,
+    among its active interfaces. Same split as SACPF (SACRA-Va).
+    Returns the power share of each link, shape (num_devices, 2).
+    """
+    num_devices = num_send_packet.shape[0]
+    active = (num_send_packet > 0).astype(float)
+    n_active = np.maximum(active.sum(axis=1, keepdims=True), 1.0)
+    return active / n_active / num_devices
+
+
 @attrs.define
 class CumulativeQoSReward:
     """

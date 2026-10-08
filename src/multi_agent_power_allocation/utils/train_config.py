@@ -66,6 +66,7 @@ class TrainConfig:
     config_dict: Dict | None = attrs.field(default=None, kw_only=True)
     raw_config: Dict = attrs.field(init=False)
     checkpoint_config: Dict = attrs.field(init=False)
+    baseline_full_power: bool = attrs.field(init=False)
     model_config: Dict = attrs.field(init=False)
     env_config: Dict = attrs.field(init=False)
     num_cluster: int = attrs.field(init=False)
@@ -152,6 +153,8 @@ class TrainConfig:
         env_config.update({"n_warm_up_step": config.get("n_warm_up_step")})
         env_config.update({"wc_clusters_configs": parsed_wc_clusters_configs})
 
+        # Not an environment argument: consumed by `get_algorithm_mapping`
+        self.baseline_full_power = bool(env_config.pop("baseline_full_power", False))
         algorithm_list: List[str] = env_config.pop("algorithm_list")
         if len(algorithm_list) != num_cluster:
             raise ValueError(
@@ -266,7 +269,10 @@ class TrainConfig:
                     rng = np.random.default_rng(self.rng.integers(0, 2**31))
                 else:
                     rng = None
-                policy = algorithm_cls.value(RAQL(action_space, rng=rng))
+                policy = algorithm_cls.value(
+                    RAQL(action_space, rng=rng),
+                    full_power_budget=self.baseline_full_power,
+                )
             elif algorithm_cls == Algorithms.RANDOM:
                 policy = algorithm_cls.value(Random(action_space))
             elif algorithm_cls == Algorithms.DQN:
@@ -275,7 +281,10 @@ class TrainConfig:
                 )
                 q_net_optim = Adam(q_net.parameters(), lr=self.SAC_config["lr"])
 
-                policy = algorithm_cls.value(DQN(q_net, q_net_optim, action_space))
+                policy = algorithm_cls.value(
+                    DQN(q_net, q_net_optim, action_space),
+                    full_power_budget=self.baseline_full_power,
+                )
             else:
                 raise NotImplementedError
 

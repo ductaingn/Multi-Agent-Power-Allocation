@@ -12,6 +12,7 @@ from multi_agent_power_allocation.algorithms.high_level.high_level_algorithm imp
     Algorithm,
     CumulativeQoSReward,
     Reward,
+    full_budget_power,
 )
 from multi_agent_power_allocation.algorithms.low_level.dqn import DQN as LLDQN
 
@@ -24,6 +25,9 @@ if TYPE_CHECKING:
 @attrs.define
 class DQN(Algorithm):
     low_level_algorithm: LLDQN
+    # False: every active link gets P_sum / (N + M) as in the original RAQL paper.
+    # True: the whole budget is used, split like SACPF (fairer power comparison).
+    full_power_budget: bool = attrs.field(default=False, kw_only=True)
     reward_fn: CumulativeQoSReward = attrs.field(init=False, factory=CumulativeQoSReward)
     num_iot_devices: int = attrs.field(init=False)
     interface_hash_map: Dict[int, np.ndarray] = attrs.field(init=False)
@@ -161,6 +165,9 @@ class DQN(Algorithm):
                     power[k, 0] = 0
                 if number_of_send_packet[k, 1] == 0:
                     power[k, 1] = 0
+
+        if self.full_power_budget:
+            power = full_budget_power(number_of_send_packet)
 
         wc_cluster.set_num_send_packet(number_of_send_packet)
         wc_cluster.set_transmit_power(power)
